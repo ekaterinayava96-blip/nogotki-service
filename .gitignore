@@ -141,3 +141,13 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+# ===== Дополнения проекта «Ноготочки» =====
+# БД с персональными данными клиентов
+*.db
+
+# Кэши Python
+__pycache__/
+.pytest_cache/
+
+# Локальные файлы среды
+*.local

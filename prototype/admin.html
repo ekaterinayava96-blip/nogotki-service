@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Панель мастера — Ноготочки</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body id="adminApp">
+
+  <div class="admin-layout">
+    <aside class="admin-side">
+      <div class="admin-side__brand"><span class="brand__dot" aria-hidden="true"></span><a href="index.html" style="color:#fff">Ноготочки</a></div>
+      <nav class="admin-nav" aria-label="Навигация панели">
+        <div class="admin-nav__item is-active">📊 Дашборд</div>
+        <div class="admin-nav__item">📅 Расписание</div>
+        <div class="admin-nav__item">💅 Услуги</div>
+        <div class="admin-nav__item">👥 Клиенты</div>
+      </nav>
+    </aside>
+
+    <main class="admin-main">
+      <h2 style="margin-bottom:var(--space-5)">Панель мастера · Екатерина</h2>
+
+      <div id="statCounts" class="stat-grid" style="margin-bottom:var(--space-6)"></div>
+
+      <div class="panel" style="margin-bottom:var(--space-6)">
+        <h3 style="margin-bottom:var(--space-4)">Заявки на запись</h3>
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Услуга</th>
+              <th>Клиент</th>
+              <th>Дата и время</th>
+              <th>Сумма</th>
+              <th>Статус</th>
+            </tr>
+          </thead>
+          <tbody id="requestsBody"></tbody>
+        </table>
+      </div>
+
+      <div class="panel" style="margin-bottom:var(--space-6)">
+        <h3 style="margin-bottom:var(--space-4)">Мастера студии</h3>
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Мастер</th>
+              <th>Специализация</th>
+              <th>Опыт</th>
+              <th>Услуги</th>
+            </tr>
+          </thead>
+          <tbody id="mastersTableBody"></tbody>
+        </table>
+      </div>
+
+      <div class="panel">
+        <h3 style="margin-bottom:var(--space-4)">Расписание · неделя</h3>
+        <div id="scheduleWeek" class="schedule">
+          <div></div>
+          <div class="schedule__day">
+            <div class="schedule__day-head">пн</div>
+            <div class="schedule__block schedule__block--paused">— выходной</div>
+          </div>
+          <div class="schedule__day">
+            <div class="schedule__day-head">вт</div>
+            <div class="schedule__block schedule__block--booked">10:00 – Маникюр</div>
+            <div class="schedule__block schedule__block--paused">13:00 – перерыв</div>
+            <div class="schedule__block schedule__block--wait">16:00 – Брови</div>
+          </div>
+          <div class="schedule__day">
+            <div class="schedule__day-head">ср</div>
+            <div class="schedule__block schedule__block--booked">11:00 – Педикюр</div>
+            <div class="schedule__block schedule__block--wait">17:00 – Маникюр</div>
+          </div>
+          <div class="schedule__day">
+            <div class="schedule__day-head">чт</div>
+            <div class="schedule__block schedule__block--wait">12:00 – Наращивание</div>
+          </div>
+          <div class="schedule__day">
+            <div class="schedule__day-head">пт</div>
+            <div class="schedule__block schedule__block--booked">10:00 – Маникюр</div>
+            <div class="schedule__block schedule__block--booked">14:00 – Брови</div>
+          </div>
+          <div class="schedule__day">
+            <div class="schedule__day-head">сб</div>
+            <div class="schedule__block schedule__block--wait">15:00 – Маникюр и педикюр</div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

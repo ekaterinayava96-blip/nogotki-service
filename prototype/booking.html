@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Запись — Ноготочки</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <header class="nav">
+    <div class="container nav__inner">
+      <a class="brand" href="index.html"><span class="brand__dot" aria-hidden="true"></span>Ноготочки</a>
+      <nav class="nav__links" aria-label="Основная навигация">
+        <a href="index.html#services">Услуги и цены</a>
+        <a href="appointments.html">Мои записи</a>
+        <a class="btn btn--ghost btn--sm" href="index.html">На главную</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container" style="padding-top:var(--space-6)">
+    <h2 style="margin-bottom:var(--space-4)">Онлайн-запись</h2>
+
+    <div class="stepper" id="stepper">
+      <div class="stepper__step is-active"><span class="stepper__num">1</span><span class="stepper__label">Услуга</span></div>
+      <div class="stepper__connector"></div>
+      <div class="stepper__step"><span class="stepper__num">2</span><span class="stepper__label">Мастер</span></div>
+      <div class="stepper__connector"></div>
+      <div class="stepper__step"><span class="stepper__num">3</span><span class="stepper__label">Дата</span></div>
+      <div class="stepper__connector"></div>
+      <div class="stepper__step"><span class="stepper__num">4</span><span class="stepper__label">Время</span></div>
+      <div class="stepper__connector"></div>
+      <div class="stepper__step"><span class="stepper__num">5</span><span class="stepper__label">Контакты</span></div>
+    </div>
+
+    <div class="layout layout--booking">
+      <div>
+        <!-- ШАГ 1: УСЛУГА -->
+        <div class="step is-visible" id="step-service">
+          <h3 style="margin-bottom:var(--space-4)">Выберите услугу</h3>
+          <div id="serviceList" class="grid"></div>
+        </div>
+
+        <!-- ШАГ 2: МАСТЕР -->
+        <div class="step" id="step-master">
+          <h3 style="margin-bottom:var(--space-4)">Выберите мастера</h3>
+          <div id="masterList" style="display:flex; flex-direction:column; gap:var(--space-3)"></div>
+          <div style="margin-top:var(--space-5)">
+            <a class="btn btn--dark" data-step="1">← Назад</a>
+          </div>
+        </div>
+
+        <!-- ШАГ 3: ДАТА -->
+        <div class="step" id="step-date">
+          <h3 style="margin-bottom:var(--space-4)">Выберите дату</h3>
+          <div class="calendar">
+            <div class="calendar__head">
+              <span class="calendar__month" id="calendarMonth"></span>
+            </div>
+            <div class="calendar__grid" id="calendar"></div>
+          </div>
+          <div style="margin-top:var(--space-5)">
+            <a class="btn btn--dark" data-step="2">← Назад</a>
+          </div>
+        </div>
+
+        <!-- ШАГ 4: ВРЕМЯ -->
+        <div class="step" id="step-time">
+          <h3 style="margin-bottom:var(--space-4)">Выберите время</h3>
+          <div class="alert alert--success">Свободные слоты видны зелёным. Занятые и перерывы недоступны.</div>
+          <div id="slotList" class="slots"></div>
+          <div style="margin-top:var(--space-5)">
+            <a class="btn btn--dark" data-step="3">← Назад</a>
+          </div>
+        </div>
+
+        <!-- ШАГ 5: КОНТАКТЫ -->
+        <div class="step" id="step-contacts">
+          <h3 style="margin-bottom:var(--space-4)">Ваши контакты</h3>
+          <div class="panel">
+            <div class="field">
+              <label for="clientName">Имя</label>
+              <input id="clientName" type="text" placeholder="Как к вам обращаться?" autocomplete="name" />
+            </div>
+            <div class="field">
+              <label for="clientPhone">Телефон</label>
+              <input id="clientPhone" type="tel" placeholder="+7 (___) ___-__-__" autocomplete="tel" inputmode="tel" />
+              <span class="hint">Нужен для связи и напоминания за 24 часа</span>
+            </div>
+            <button id="submitBooking" class="btn btn--primary btn--lg btn--block">Подтвердить запись 💖</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- РЕЗЮМЕ -->
+      <aside>
+        <div class="panel panel--tint" style="position:sticky; top:84px">
+          <h3 style="margin-bottom:var(--space-4)">Ваша запись</h3>
+          <dl class="summary">
+            <div class="summary__row"><dt>Услуга</dt><dd id="sumService">—</dd></div>
+            <div class="summary__row"><dt>Мастер</dt><dd id="sumMaster">—</dd></div>
+            <div class="summary__row"><dt>Дата и время</dt><dd id="sumWhen">—</dd></div>
+            <div class="summary__divider"></div>
+            <div class="summary__total summary__row"><dt>Итого</dt><dd id="sumPrice">—</dd></div>
+          </dl>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

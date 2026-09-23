@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ноготочки — студия маникюра и бровей</title>
+  <meta name="description" content="Запись на маникюр, педикюр и оформление бровей онлайн. Стерильно, уютно и красиво." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <header class="nav">
+    <div class="container nav__inner">
+      <a class="brand" href="index.html"><span class="brand__dot" aria-hidden="true"></span>Ноготочки</a>
+      <nav class="nav__links" aria-label="Основная навигация">
+        <a href="index.html#services">Услуги и цены</a>
+        <a href="index.html#about">О студии</a>
+        <a href="appointments.html">Мои записи</a>
+        <a href="admin.html">Панель мастера</a>
+        <a class="btn btn--primary btn--sm" href="booking.html">Записаться</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <!-- ГЕРО -->
+    <section class="hero">
+      <div class="container">
+        <span class="hero__badge">💖 Стерильно · уютно · красиво</span>
+        <h1>Студия маникюра<br />и бровей «Ноготочки»</h1>
+        <p class="hero__sub">
+          Запишитесь на маникюр, педикюр или оформление бровей за 2 минуты —
+          выберите мастера, удобные дату и время, а подтверждение придёт автоматически.
+        </p>
+        <div class="hero__cta">
+          <a class="btn btn--primary btn--lg" href="booking.html">Записаться онлайн</a>
+          <a class="btn btn--ghost btn--lg" href="#services">Смотреть услуги</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- УСЛУГИ -->
+    <section id="services">
+      <div class="container">
+        <h2 style="margin-bottom:8px">Услуги и цены</h2>
+        <p style="color:var(--neutral-500); margin-bottom:var(--space-6)">
+          Работаем со вторника по субботу, с 10:00 до 20:00. Приём только по предварительной записи.
+        </p>
+        <div id="catalogGrid" class="grid"></div>
+      </div>
+    </section>
+
+    <!-- МАСТЕРА -->
+    <section id="masters" style="background:var(--rose-100)">
+      <div class="container">
+        <h2 style="text-align:center; margin-bottom:var(--space-2)">Наши мастера</h2>
+        <p style="text-align:center; color:var(--neutral-500); margin-bottom:var(--space-6)">
+          Каждый мастер специализируется на своём направлении, поэтому вы попадаете к профи своего дела.
+        </p>
+        <div id="mastersGrid" class="grid"></div>
+      </div>
+    </section>
+
+    <!-- О СТУДИИ -->
+    <section id="about">
+      <div class="container">
+        <h2 style="text-align:center; margin-bottom:var(--space-6)">О студии</h2>
+        <div class="layout" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr))">
+          <div class="panel" style="text-align:center">
+            <div style="font-size:2rem; margin-bottom:var(--space-2)">📍</div>
+            <h3>Адрес</h3>
+            <p style="color:var(--neutral-500)">г. Воронеж, Проспект Революции, д. 10</p>
+          </div>
+          <div class="panel" style="text-align:center">
+            <div style="font-size:2rem; margin-bottom:var(--space-2)">📞</div>
+            <h3>Телефон</h3>
+            <p style="color:var(--neutral-500)">8-900-453-50-00</p>
+          </div>
+          <div class="panel" style="text-align:center">
+            <div style="font-size:2rem; margin-bottom:var(--space-2)">🕙</div>
+            <h3>График работы</h3>
+            <p style="color:var(--neutral-500)">вт–сб, 10:00–20:00</p>
+          </div>
+          <div class="panel" style="text-align:center">
+            <div style="font-size:2rem; margin-bottom:var(--space-2)">💬</div>
+            <h3>Telegram</h3>
+            <p style="color:var(--neutral-500)">@Vibekatena</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- КАК ЗАПИСАТЬСЯ -->
+    <section style="background:var(--rose-100)">
+      <div class="container">
+        <h2 style="text-align:center; margin-bottom:var(--space-6)">Как проходит запись</h2>
+        <div class="grid">
+          <div class="panel" style="text-align:center">
+            <div style="font-size:2rem; margin-bottom:var(--space-2)">1️⃣</div>
+            <h3>Выберите услугу</h3>
+            <p style="color:var(--neutral-500); font-size:var(--text-sm)">Каталог с ценами и длительностью процедур</p>
+          </div>
+          <div class="panel" style="text-align:center">
+            <div style="font-size:2rem; margin-bottom:var(--space-2)">2️⃣</div>
+            <h3>Выберите мастера и время</h3>
+            <p style="color:var(--neutral-500); font-size:var(--text-sm)">Свободные слоты видны вживую, без звонков</p>
+          </div>
+          <div class="panel" style="text-align:center">
+            <div style="font-size:2rem; margin-bottom:var(--space-2)">3️⃣</div>
+            <h3>Получите подтверждение</h3>
+            <p style="color:var(--neutral-500); font-size:var(--text-sm)">Мастер подтвердит запись и напомнит за сутки</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container footer__grid">
+      <div>
+        <div class="brand brand--lg"><span class="brand__dot" aria-hidden="true"></span>Ноготочки</div>
+        <p style="color:var(--neutral-500); font-size:var(--text-sm); margin-top:var(--space-2)">
+          Студия маникюра и бровей в центре города.
+        </p>
+      </div>
+      <div>
+        <h4>Контакты</h4>
+        <ul>
+          <li>📍 г. Воронеж, Проспект Революции, д. 10</li>
+          <li>📞 8-900-453-50-00</li>
+          <li>🕙 График: вт–сб, 10:00–20:00</li>
+          <li>💬 Telegram: @Vibekatena</li>
+        </ul>
+      </div>
+      <div>
+        <h4>Клиентам</h4>
+        <ul>
+          <li><a href="booking.html">Записаться</a></li>
+          <li><a href="appointments.html">Мои записи</a></li>
+          <li><a href="admin.html">Панель мастера</a></li>
+        </ul>
+      </div>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,467 @@
+/* ============================================================
+   ДИЗАЙН-СИСТЕМА «НОГОТОЧКИ» v0.1
+   Стиль: женственный, тёплый, уютный, премиум, чистый
+   Mobile-first: 375 → 768 → 1200
+   ============================================================ */
+
+/* ---------- 1. ДИЗАЙН-ТОКЕНЫ ---------- */
+:root {
+  /* Цветовая палитра: 60/30/10 */
+  --rose-50:  #fdf6f7;  /* фон тёплый белый */
+  --rose-100: #f9ecef;  /* фон секций */
+  --rose-200: #f3d9de;  /* рамки, ховеры */
+  --rose-300: #e6bdc6; /* приглушённый */
+  --rose-400: #d998a6;
+
+  --berry-500: #b84a62;  /* ПРИМАРНЫЙ АКЦЕНТ / CTA */
+  --berry-600: #a03c53;  /* hover */
+  --berry-700: #87304a;  /* pressed */
+  --plum-800:  #4a2030;  /* глубокий для текста на светлом */
+
+  --neutral-500: #8a7a80; /* текст приглушённый */
+  --neutral-600: #6b5a61; /* заголовки малые */
+  --neutral-800: #3d3036; /* основной текст */
+  --plum-900:   #2a1e24;  /* текст заголовков */
+
+  --warm-white: #fffaf7;
+
+  /* Статусные */
+  --status-free:    #2e8b57;
+  --status-free-bg: #e4f4ea;
+  --status-busy:    #d64545;
+  --status-busy-bg: #fbe9e9;
+  --status-wait:    #d9930a;
+  --status-wait-bg: #fdf3de;
+  --status-paused:  #8a7a80;
+  --status-paused-bg:#f0ebed;
+
+  /* Типографика */
+  --font-head: "Playfair Display", Georgia, serif;
+  --font-body: "Nunito", "Segoe UI", system-ui, sans-serif;
+
+  --text-h1: clamp(2.2rem, 6vw, 3.75rem);
+  --text-h2: clamp(1.75rem, 4vw, 2.5rem);
+  --text-h3: 1.5rem;
+  --text-body: 1rem;
+  --text-sm: 0.875rem;
+  --text-caption: 0.8125rem;
+
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 22px;
+  --radius-xl: 28px;
+  --radius-full: 999px;
+
+  --shadow-sm: 0 1px 3px rgba(74, 32, 48, 0.08);
+  --shadow-md: 0 6px 18px rgba(74, 32, 48, 0.10);
+  --shadow-lg: 0 14px 40px rgba(74, 32, 48, 0.16);
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  --container: 1180px;
+}
+
+/* ---------- 2. БАЗА ---------- */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font-body);
+  font-size: var(--text-body);
+  line-height: 1.5;
+  color: var(--neutral-800);
+  background: var(--warm-white);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 { font-family: var(--font-head); color: var(--plum-900); line-height: 1.2; }
+h1 { font-size: var(--text-h1); font-weight: 700; }
+h2 { font-size: var(--text-h2); font-weight: 700; }
+h3 { font-size: var(--text-h3); font-weight: 700; }
+
+p  { color: var(--neutral-800); }
+a  { color: var(--berry-600); text-decoration: none; }
+a:hover { color: var(--berry-700); }
+
+img, svg { max-width: 100%; display: block; }
+
+.container { max-width: var(--container); margin: 0 auto; padding: 0 var(--space-5); }
+
+section { padding: var(--space-8) 0; }
+
+::selection { background: var(--rose-300); color: var(--plum-900); }
+
+/* Доступность: видимый фокус */
+:focus-visible {
+  outline: 3px solid var(--berry-400, #d998a6);
+  outline-offset: 2px;
+}
+
+/* ---------- 3. ШАПКА / НАВИГАЦИЯ ---------- */
+.nav {
+  position: sticky; top: 0; z-index: 50;
+  background: rgba(255, 250, 247, 0.92);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--rose-200);
+}
+.nav__inner {
+  display: flex; align-items: center; justify-content: space-between;
+  height: 64px;
+}
+.brand {
+  display: flex; align-items: center; gap: var(--space-2);
+  font-family: var(--font-head); font-weight: 700; font-size: 1.25rem;
+  color: var(--plum-900);
+}
+.brand__dot { width: 12px; height: 12px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--berry-500), var(--rose-400)); }
+.nav__links { display: flex; gap: var(--space-5); align-items: center; }
+.nav__links a { color: var(--neutral-600); font-weight: 600; }
+.nav__links a:hover { color: var(--berry-600); }
+
+/* Большой бренд в футере/хиро */
+.brand--lg { font-size: 2rem; }
+
+/* ---------- 4. КНОПКИ ---------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
+  border: none; border-radius: var(--radius-full);
+  font-family: var(--font-body); font-weight: 700;
+  cursor: pointer; text-align: center;
+  transition: transform .12s ease, box-shadow .12s ease, background .15s ease;
+  white-space: nowrap;
+}
+.btn:active { transform: scale(0.97); }
+
+/* размеры */
+.btn--lg { padding: 16px 32px; font-size: 1.0625rem; }
+.btn--md { padding: 12px 24px;  font-size: 1rem; }
+.btn--sm { padding: 8px 16px;   font-size: 0.875rem; }
+
+/* стили */
+.btn--primary { background: var(--berry-500); color: #fff; box-shadow: var(--shadow-sm); }
+.btn--primary:hover { background: var(--berry-600); box-shadow: var(--shadow-md); }
+
+.btn--secondary { background: var(--rose-100); color: var(--berry-700); }
+.btn--secondary:hover { background: var(--rose-200); }
+
+.btn--ghost { background: transparent; color: var(--berry-600); border: 1.5px solid var(--rose-300); }
+.btn--ghost:hover { background: var(--rose-50); border-color: var(--berry-500); }
+
+.btn--dark { background: var(--plum-900); color: #fff; }
+.btn--dark:hover { background: var(--plum-800); }
+
+.btn--block { width: 100%; }
+.btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+
+/* ---------- 5. КАРТОЧКА УСЛУГИ ---------- */
+.card-service {
+  background: #fff;
+  border: 1px solid var(--rose-200);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  transition: transform .15s ease, box-shadow .15s ease;
+  display: flex; flex-direction: column;
+}
+.card-service:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); }
+.card-service__media {
+  background: linear-gradient(135deg, var(--rose-100), var(--rose-50));
+  height: 150px; display: flex; align-items: center; justify-content: center;
+  font-size: 3rem;
+}
+.card-service__img { width: 100%; height: 150px; object-fit: cover; }
+.card-service__media-wrap { position: relative; }
+.media-upload {
+  position: absolute; right: 12px; top: 12px;
+  width: 34px; height: 34px; border-radius: 50%;
+  border: 2px solid #fff; background: var(--warm-white); color: var(--berry-600);
+  font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  box-shadow: var(--shadow-md); transition: transform .12s ease, background .12s ease;
+  opacity: .85;
+}
+.media-upload:hover { transform: scale(1.1); background: #fff; opacity: 1; }
+.card-service__body { padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-2); flex: 1; }
+.card-service__title { font-family: var(--font-body); font-weight: 800; font-size: 1.125rem; color: var(--plum-900); }
+.card-service__desc { color: var(--neutral-500); font-size: var(--text-sm); flex: 1; }
+.card-service__meta {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: var(--space-3);
+}
+.card-service__price { font-weight: 800; color: var(--berry-600); font-size: 1.125rem; }
+.card-service__time { color: var(--neutral-500); font-size: var(--text-sm); }
+
+/* ---------- 6. КАЛЕНДАРЬ ---------- */
+.calendar {
+  background: #fff; border: 1px solid var(--rose-200);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+.calendar__head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--rose-200);
+}
+.calendar__month { font-weight: 800; color: var(--plum-900); }
+.calendar__nav-btn {
+  width: 36px; height: 36px; border-radius: 50%;
+  border: 1.5px solid var(--rose-300); background: #fff; color: var(--berry-600);
+  font-size: 1.1rem; cursor: pointer;
+}
+.calendar__grid {
+  display: grid; grid-template-columns: repeat(7, 1fr);
+  gap: var(--space-1); padding: var(--space-4) var(--space-5) var(--space-5);
+}
+.calendar__dow { text-align: center; font-size: var(--text-caption); font-weight: 700; color: var(--neutral-500); padding-bottom: var(--space-2); }
+.calendar__day {
+  aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: var(--text-sm);
+  border-radius: var(--radius-md); color: var(--neutral-800);
+  background: transparent; border: none; cursor: pointer;
+  transition: background .12s ease, color .12s ease;
+  position: relative;
+}
+.calendar__day:hover:not(:disabled) { background: var(--rose-100); }
+.calendar__day--other { color: var(--rose-300); }
+.calendar__day--free { color: var(--status-free); }
+.calendar__day--free::after {
+  content: ""; position: absolute; bottom: 6px;
+  width: 5px; height: 5px; border-radius: 50%; background: var(--status-free);
+}
+.calendar__day--busy { color: var(--rose-300); text-decoration: line-through; }
+.calendar__day--selected { background: var(--berry-500); color: #fff; }
+.calendar__day--selected::after { background: #fff; }
+.calendar__day:disabled { cursor: not-allowed; }
+
+/* Сетка времени — чипы слотов */
+.slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: var(--space-2); }
+.slot {
+  padding: 12px 8px; border-radius: var(--radius-md);
+  border: 1.5px solid var(--rose-200); background: #fff;
+  font-weight: 700; cursor: pointer; color: var(--neutral-800);
+  transition: all .12s ease;
+}
+.slot:hover:not(:disabled) { border-color: var(--berry-500); background: var(--rose-50); }
+.slot--busy { background: var(--status-busy-bg); color: var(--status-busy); border-color: transparent; cursor: not-allowed; text-decoration: line-through; }
+.slot--paused { background: var(--status-paused-bg); color: var(--status-paused); border-color: transparent; cursor: not-allowed; }
+.slot--selected { background: var(--berry-500); border-color: var(--berry-500); color: #fff; }
+
+/* ---------- 7. ФОРМЫ ---------- */
+.field { display: flex; flex-direction: column; gap: var(--space-2); margin-bottom: var(--space-4); }
+.field label { font-weight: 700; color: var(--plum-900); font-size: var(--text-sm); }
+.field input, .field textarea, .field select {
+  padding: 13px 16px; border-radius: var(--radius-md);
+  border: 1.5px solid var(--rose-300); background: #fff;
+  font-family: var(--font-body); font-size: 1rem; color: var(--neutral-800);
+  transition: border-color .12s ease, box-shadow .12s ease;
+}
+.field input:focus, .field textarea:focus, .field select:focus {
+  outline: none; border-color: var(--berry-500); box-shadow: 0 0 0 3px var(--rose-200);
+}
+.field input::placeholder, .field textarea::placeholder { color: var(--neutral-500); }
+.field .hint { font-size: var(--text-caption); color: var(--neutral-500); }
+.field--error input { border-color: var(--status-busy); }
+
+/* ---------- 8. БЕЙДЖИ СТАТУСОВ ---------- */
+.badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 12px; border-radius: var(--radius-full);
+  font-size: var(--text-caption); font-weight: 800;
+}
+.badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.badge--wait     { background: var(--status-wait-bg); color: var(--status-wait); }
+.badge--confirmed{ background: var(--status-free-bg); color: var(--status-free); }
+.badge--done     { background: var(--status-free-bg);  color: var(--status-free); }
+.badge--canceled { background: var(--status-busy-bg);  color: var(--status-busy); }
+
+/* ---------- 9. КАРТОЧКА ЗАПИСИ / СПИСКИ ---------- */
+.list { display: flex; flex-direction: column; gap: var(--space-3); }
+.card-appointment {
+  background: #fff; border: 1px solid var(--rose-200); border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-5); box-shadow: var(--shadow-sm);
+}
+.card-appointment__top { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-3); flex-wrap: wrap; }
+.card-appointment__title { font-weight: 800; color: var(--plum-900); }
+.card-appointment__meta { font-size: var(--text-sm); color: var(--neutral-500); margin-top: var(--space-1); }
+.card-appointment__actions { display: flex; gap: var(--space-2); margin-top: var(--space-3); flex-wrap: wrap; }
+
+/* ---------- 10. МОДАЛЬНОЕ ОКНО ---------- */
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(42, 30, 36, 0.5);
+  display: none; align-items: center; justify-content: center; z-index: 100; padding: var(--space-4);
+}
+.modal-backdrop.is-open { display: flex; }
+.modal {
+  background: var(--warm-white); border-radius: var(--radius-xl);
+  max-width: 440px; width: 100%; padding: var(--space-6);
+  box-shadow: var(--shadow-lg);
+}
+.modal__title { margin-bottom: var(--space-2); }
+.modal__text { color: var(--neutral-500); margin-bottom: var(--space-5); }
+.modal__actions { display: flex; gap: var(--space-2); justify-content: flex-end; flex-wrap: wrap; }
+
+/* ---------- 11. СТЕППЕР (шаги бронирования) ---------- */
+.stepper { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-6); flex-wrap: wrap; }
+.stepper__step { display: flex; align-items: center; gap: var(--space-2); }
+.stepper__num {
+  width: 32px; height: 32px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: var(--text-sm);
+  background: var(--rose-100); color: var(--neutral-500);
+  flex-shrink: 0;
+}
+.stepper__label { font-size: var(--text-sm); font-weight: 700; color: var(--neutral-500); }
+.stepper__step.is-active .stepper__num { background: var(--berry-500); color: #fff; }
+.stepper__step.is-active .stepper__label { color: var(--berry-700); }
+.stepper__step.is-done .stepper__num { background: var(--status-free); color: #fff; }
+.stepper__connector { flex: 1; height: 2px; background: var(--rose-200); min-width: 18px; }
+.stepper__step.is-done ~ .stepper__connector { background: var(--status-free); }
+
+/* ---------- 12. ШАГИ / СЕКЦИИ БРОНИ ---------- */
+.step { display: none; } .step.is-visible { display: block; }
+
+.layout {
+  display: grid; grid-template-columns: 1fr; gap: var(--space-5);
+}
+.layout--booking { grid-template-columns: 1.6fr 1fr; align-items: start; }
+
+.panel {
+  background: #fff; border: 1px solid var(--rose-200);
+  border-radius: var(--radius-lg); padding: var(--space-5);
+  box-shadow: var(--shadow-sm);
+}
+.panel--tint { background: var(--rose-50); }
+
+/* Мастер-карточка (выбор) */
+.master {
+  display: flex; align-items: center; gap: var(--space-4);
+  border: 1.5px solid var(--rose-200); border-radius: var(--radius-lg);
+  padding: var(--space-4); cursor: pointer; transition: all .12s ease; background: #fff;
+}
+.master:hover { border-color: var(--rose-400); }
+.master--selected { border-color: var(--berry-500); background: var(--rose-50); }
+.master__avatar {
+  width: 56px; height: 56px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--rose-200), var(--rose-100));
+  display: flex; align-items: center; justify-content: center; font-size: 1.5rem; flex-shrink: 0;
+  object-fit: cover;
+}
+.master__photo-wrap { position: relative; width: fit-content; margin: 0 auto; flex-shrink: 0; }
+.master .master__photo-wrap { margin: 0; }
+.avatar-upload {
+  position: absolute; right: -4px; bottom: -4px;
+  width: 30px; height: 30px; border-radius: 50%;
+  border: 2px solid var(--warm-white); background: var(--berry-500); color: #fff;
+  font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  box-shadow: var(--shadow-sm); transition: background .12s ease, transform .12s ease;
+}
+.avatar-upload:hover { background: var(--berry-600); transform: scale(1.08); }
+.avatar-upload--sm { width: 24px; height: 24px; font-size: 12px; right: -2px; bottom: -2px; }
+.master__name { font-weight: 800; color: var(--plum-900); }
+.master__role { font-size: var(--text-sm); color: var(--neutral-500); }
+
+/* ============================================================
+   АДМИН-ПАНЕЛЬ
+   ============================================================ */
+.admin-layout { display: grid; grid-template-columns: 260px 1fr; min-height: calc(100vh - 64px); }
+.admin-side {
+  background: var(--plum-900); color: #fff; padding: var(--space-5);
+  display: flex; flex-direction: column; gap: var(--space-2);
+}
+.admin-side__brand { display: flex; align-items: center; gap: var(--space-2); font-family: var(--font-head); font-weight: 700; margin-bottom: var(--space-5); }
+.admin-nav__item {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: 12px 14px; border-radius: var(--radius-md);
+  color: rgba(255,255,255,.78); font-weight: 700; cursor: pointer;
+  transition: background .12s ease, color .12s ease;
+}
+.admin-nav__item:hover { background: rgba(255,255,255,.08); color: #fff; }
+.admin-nav__item.is-active { background: var(--berry-500); color: #fff; }
+.admin-main { padding: var(--space-6); background: var(--rose-50); }
+
+/* Расписание — неделя по дням */
+.schedule { display: grid; grid-template-columns: 60px repeat(7, 1fr); gap: var(--space-2); overflow-x: auto; }
+.schedule__day {
+  background: #fff; border: 1px solid var(--rose-200); border-radius: var(--radius-md);
+  padding: var(--space-2); min-width: 120px;
+}
+.schedule__day-head { text-align: center; font-weight: 800; color: var(--plum-900); font-size: var(--text-sm); padding-bottom: var(--space-2); border-bottom: 1px solid var(--rose-200); }
+.schedule__block {
+  margin: var(--space-2) 0; padding: 8px 10px; border-radius: var(--radius-sm);
+  font-size: var(--text-sm); font-weight: 700;
+}
+.schedule__block--booked { background: var(--status-free-bg); color: var(--status-free); }
+.schedule__block--wait    { background: var(--status-wait-bg); color: var(--status-wait); }
+.schedule__block--paused  { background: var(--status-paused-bg); color: var(--status-paused); }
+
+/* Таблица уведомлений */
+.table { width: 100%; border-collapse: collapse; }
+.table th { text-align: left; font-size: var(--text-caption); text-transform: uppercase; letter-spacing: .04em; color: var(--neutral-500); padding: var(--space-2) var(--space-3); border-bottom: 2px solid var(--rose-200); }
+.table td { padding: var(--space-3); border-bottom: 1px solid var(--rose-100); font-size: var(--text-sm); }
+.table tr:hover td { background: var(--rose-50); }
+
+/* Стат-карточки дашборда */
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-4); }
+.stat-card { background: #fff; border: 1px solid var(--rose-200); border-radius: var(--radius-lg); padding: var(--space-5); box-shadow: var(--shadow-sm); }
+.stat-card__value { font-family: var(--font-head); font-size: 2rem; font-weight: 700; color: var(--berry-600); }
+.stat-card__label { color: var(--neutral-500); font-size: var(--text-sm); font-weight: 700; }
+
+/* ---------- 13. ГЕРО / ЛЕНДИНГ ---------- */
+.hero { text-align: center; padding: var(--space-8) 0 var(--space-7); }
+.hero__badge {
+  display: inline-flex; gap: 8px; align-items: center;
+  background: var(--rose-100); color: var(--berry-700); font-weight: 800;
+  padding: 8px 18px; border-radius: var(--radius-full); font-size: var(--text-sm);
+  margin-bottom: var(--space-4);
+}
+.hero h1 { margin-bottom: var(--space-4); }
+.hero__sub { max-width: 620px; margin: 0 auto var(--space-6); color: var(--neutral-600); font-size: 1.125rem; }
+.hero__cta { display: flex; gap: var(--space-3); justify-content: center; flex-wrap: wrap; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-5); }
+
+/* Футер */
+.footer { border-top: 1px solid var(--rose-200); padding: var(--space-7) 0 var(--space-6); background: var(--rose-50); }
+.footer__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-6); }
+.footer h4 { margin-bottom: var(--space-3); font-family: var(--font-body); font-size: var(--text-sm); text-transform: uppercase; letter-spacing: .06em; color: var(--neutral-500); }
+.footer li { list-style: none; margin-bottom: var(--space-2); }
+.footer a { color: var(--neutral-600); }
+.footer a:hover { color: var(--berry-600); }
+
+/* Алерт-бары */
+.alert { display: flex; gap: var(--space-3); align-items: flex-start; padding: var(--space-4); border-radius: var(--radius-md); margin-bottom: var(--space-4); font-size: var(--text-sm); }
+.alert--success { background: var(--status-free-bg); color: var(--status-free); }
+.alert--warning { background: var(--status-wait-bg); color: var(--status-wait); }
+
+/* Резюме брони (сайдбар) */
+.summary { display: flex; flex-direction: column; gap: var(--space-3); }
+.summary__row { display: flex; justify-content: space-between; gap: var(--space-3); font-size: var(--text-sm); }
+.summary__row dt { color: var(--neutral-500); }
+.summary__row dd { font-weight: 700; color: var(--plum-900); text-align: right; }
+.summary__divider { border-top: 1px dashed var(--rose-300); margin: var(--space-2) 0; }
+.summary__total { justify-content: space-between; font-weight: 800; color: var(--plum-900); }
+
+/* ---------- АДАПТИВ ---------- */
+@media (max-width: 767px) {
+  .nav__links { display: none; }
+  .layout--booking { grid-template-columns: 1fr; }
+  .admin-layout { grid-template-columns: 1fr; }
+  .admin-side { flex-direction: row; align-items: center; padding: var(--space-3) var(--space-4); }
+  .admin-side__brand { margin-bottom: 0; margin-right: auto; }
+  .admin-nav { display: flex; gap: var(--space-2); overflow-x: auto; }
+  .admin-nav__item { white-space: nowrap; }
+  .admin-main { padding: var(--space-4); }
+  section { padding: var(--space-6) 0; }
+}
+
+@media (min-width: 768px) and (max-width: 1199px) {
+  .layout--booking { grid-template-columns: 1.4fr 1fr; }
+}

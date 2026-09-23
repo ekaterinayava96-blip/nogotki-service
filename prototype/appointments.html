@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Мои записи — Ноготочки</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <header class="nav">
+    <div class="container nav__inner">
+      <a class="brand" href="index.html"><span class="brand__dot" aria-hidden="true"></span>Ноготочки</a>
+      <nav class="nav__links" aria-label="Основная навигация">
+        <a href="index.html#services">Услуги и цены</a>
+        <a class="btn btn--primary btn--sm" href="booking.html">Записаться</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container" style="padding-top:var(--space-6)">
+    <h2 style="margin-bottom:var(--space-4)">Мои записи</h2>
+    <p style="color:var(--neutral-500); margin-bottom:var(--space-5)">
+      Здесь вы видите ближайшие визиты. Отменить запись можно до подтверждения.
+    </p>
+    <div id="appointmentsList" class="list"></div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
