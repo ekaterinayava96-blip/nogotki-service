@@ -151,3 +151,23 @@ __pycache__/
 
 # Локальные файлы среды
 *.local
+
+# OS / IDE service files
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# Secrets and keys outside .env
+*.pem
+*.key
+*.p12
+secrets/
+credentials/
+
+# Local databases
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
