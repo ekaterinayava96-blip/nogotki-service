@@ -378,7 +378,7 @@ CREATE TABLE clients (
 
 ### 3.10. `users` — учётные записи для входа в панель
 
-Владелец и мастера входят в админ-панель. **Хранится только хеш пароля, самого пароля в базе нет.**
+Владелец, мастера и клиенты входят в сервис. **Хранится только хеш пароля, самого пароля в базе нет.**
 
 | Поле | Тип | Обяз. | Описание |
 |---|---|---|---|
@@ -386,7 +386,7 @@ CREATE TABLE clients (
 | `username` | TEXT | NOT NULL | Логин для входа |
 | `password_hash` | TEXT | NOT NULL | Хеш пароля (bcrypt/argon2 — высокая стоимость, например аргон2id или bcrypt cost=12). Пароль в открытом виде **никогда** не сохраняется |
 | `master_id` | INTEGER | NULL, UNIQUE | FK → masters.id; NULL для владельца, не являющегося мастером |
-| `role` | TEXT | NOT NULL, DEFAULT 'master' | `owner` — владелец, `master` — мастер |
+| `role` | TEXT | NOT NULL, DEFAULT 'master' | `owner` — владелец, `master` — мастер, `client` — клиент |
 | `is_active` | INTEGER | NOT NULL, DEFAULT 1 | 1 — можно входить |
 | `last_login_at` | TEXT | NULL | Последний вход |
 
@@ -400,7 +400,7 @@ CREATE TABLE users (
   username      TEXT NOT NULL,
   password_hash TEXT NOT NULL,
   master_id     INTEGER UNIQUE REFERENCES masters(id),
-  role          TEXT NOT NULL DEFAULT 'master' CHECK (role IN ('owner','master')),
+  role          TEXT NOT NULL DEFAULT 'master' CHECK (role IN ('owner','master','client')),
   is_active     INTEGER NOT NULL DEFAULT 1,
   last_login_at TEXT,
   UNIQUE (username)
@@ -547,7 +547,7 @@ CREATE TABLE users (
   username      TEXT NOT NULL,
   password_hash TEXT NOT NULL,
   master_id     INTEGER UNIQUE REFERENCES masters(id),
-  role          TEXT NOT NULL DEFAULT 'master' CHECK (role IN ('owner','master')),
+  role          TEXT NOT NULL DEFAULT 'master' CHECK (role IN ('owner','master','client')),
   is_active     INTEGER NOT NULL DEFAULT 1,
   last_login_at TEXT,
   UNIQUE (username)
@@ -575,7 +575,7 @@ CREATE TABLE payments (
 | Поле | Набор значений | Почему именно CHECK |
 |---|---|---|
 | `bookings.status` | `wait` (ожидает подтверждения) · `confirmed` · `done` · `canceled` | Статусы жёстко заданы логикой: избегает опечаток и «своих» статусов вроде «ОЖИДАЕТСЯ» |
-| `users.role` | `owner` · `master` | Роли фиксированы ролями продукта |
+| `users.role` | `owner` · `master` · `client` | Роли фиксированы ролями продукта |
 | `payments.status` | `pending` · `paid` · `failed` · `refunded` | Машина состояний платежа |
 | `payments.provider` | `yookassa` · `sbp` · `cash` | Известные способы оплаты |
 | `bookings.source` | `web` · `telegram` | Два канала записи |

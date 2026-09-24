@@ -1,0 +1,23 @@
+{
+  "name": "nogotki-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Backend сервиса записи студии «Ноготочки»",
+  "type": "commonjs",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start:check": "node src/startup.js",
+    "db:migrate": "node src/db/runMigrations.js",
+    "db:seed": "node src/db/seed.js",
+    "db:reset": "node src/db/reset.js",
+    "db:backup": "node src/db/backup.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^11.0.0",
+    "dotenv": "^16.4.0"
+  }
+}
