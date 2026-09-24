@@ -20,8 +20,10 @@ async function backup() {
 
   const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
   const target = path.join(dir, `nogotki-${stamp}.db`);
+  if (fs.existsSync(target)) fs.unlinkSync(target);
 
-  await db.backup(target);
+  // node:sqlite не имеет db.backup(); VACUUM INTO даёт консистентную копию
+  db.exec(`VACUUM INTO '${target.replace(/'/g, "''")}'`);
   console.log('Бэкап создан:', target);
 
   // Ретеншн: оставляем KEEP самых свежих (имена сортируются хронологично)

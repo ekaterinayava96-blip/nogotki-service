@@ -6,7 +6,7 @@
   "type": "commonjs",
   "main": "src/index.js",
   "engines": {
-    "node": ">=18"
+    "node": ">=22.13"
   },
   "scripts": {
     "start:check": "node src/startup.js",
@@ -17,7 +17,6 @@
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
-    "better-sqlite3": "^11.0.0",
     "dotenv": "^16.4.0"
   }
 }
