@@ -49,4 +49,10 @@ function verifyPassword(password, stored) {
   return computed.length === expected.length && crypto.timingSafeEqual(computed, expected);
 }
 
-module.exports = { hashPassword, verifyPassword };
+// «Фоновый» хеш для выравнивания времени ответа при входе: когда логина
+// не существует, всё равно вычисляется scrypt этой «пустышки», чтобы по
+// длительности ответа нельзя было отличить «нет такого логина» от «неверный
+// пароль». Совпадение с константным нулевым ключом невозможно.
+const DUMMY_HASH = [PREFIX, SCRYPT_N, SCRYPT_R, SCRYPT_P, '0'.repeat(SALT_LEN * 2), '0'.repeat(KEY_LEN * 2)].join('$');
+
+module.exports = { hashPassword, verifyPassword, DUMMY_HASH };

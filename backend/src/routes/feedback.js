@@ -27,7 +27,7 @@ router.post(
   })
 );
 
-// GET /feedback — свои отзывы текущего клиента.
+// GET /feedback — свои отзывы текущего клиента; «все» — только владельцу.
 router.get(
   '/',
   authRequired,
@@ -36,8 +36,12 @@ router.get(
       const clientId = q.clientIdForUser(req.user.id);
       return res.json({ feedback: clientId ? q.listFeedback({ clientId }) : [] });
     }
-    // owner видит все отзывы (то же, что и /admin/feedback, но без панели)
-    return res.json({ feedback: q.listFeedback({}) });
+    if (hasRole(req.user, 'owner')) {
+      return res.json({ feedback: q.listFeedback({}) });
+    }
+    // Остальные роли (например master) чужую обратную связь с телефонами
+    // клиентов не получают.
+    return res.status(403).json({ error: { message: 'Недостаточно прав.', code: 'FORBIDDEN' } });
   })
 );
 

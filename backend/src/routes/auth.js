@@ -11,7 +11,7 @@ const express = require('express');
 const db = require('../db/connection');
 const q = require('../repo/queries');
 const v = require('../lib/validate');
-const { hashPassword, verifyPassword } = require('../lib/passwords');
+const { hashPassword, verifyPassword, DUMMY_HASH } = require('../lib/passwords');
 const { asyncH } = require('../lib/http');
 const { issueToken, revokeToken, authRequired } = require('../middleware/auth');
 const { createLimiter } = require('../middleware/rateLimit');
@@ -75,7 +75,11 @@ router.post('/login', loginLimiter, asyncH(async (req, res) => {
   }
 
   const user = q.userByUsername(username);
-  if (!user || user.is_active !== 1 || !verifyPassword(password, user.password_hash)) {
+  // При несуществующем/неактивном логине проверяем «пустышку» DUMMY_HASH:
+  // scrypt считается в любом случае, и по времени ответа нельзя определить,
+  // существует ли такой аккаунт (защита от username-энумерации через timing).
+  const storedHash = user && user.is_active === 1 ? user.password_hash : DUMMY_HASH;
+  if (!verifyPassword(password, storedHash)) {
     return res.status(401).json({
       error: { message: 'Неверный логин или пароль.', code: 'INVALID_CREDENTIALS' },
     });
