@@ -6,7 +6,7 @@ const express = require('express');
 
 const db = require('../db/connection');
 const q = require('../repo/queries');
-const { parseUtcIso, toDbLocal, nowDbLocal } = require('../lib/time');
+const { parseUtcIso, toDbLocal, nowDbLocal, assertNotPast } = require('../lib/time');
 const v = require('../lib/validate');
 const { asyncH, isBookingTimeConflict, sendSlotConflict } = require('../lib/http');
 const { requireRole } = require('../middleware/auth');
@@ -208,6 +208,132 @@ router.delete(
       db.prepare('DELETE FROM masters WHERE id = ?').run(id);
     })();
     return res.status(204).end();
+  })
+);
+
+// ---------- Расписание мастера ----------
+
+// GET /admin/masters/:id/schedule — рабочее время мастера по дням недели
+router.get(
+  '/masters/:id/schedule',
+  asyncH(async (req, res) => {
+    const id = v.intId(req.params.id, 'id');
+    if (!q.masterById(id)) return res.status(404).json({ error: { message: 'Мастер не найден.', code: 'NOT_FOUND' } });
+    return res.json({ schedule: q.masterSchedule(id) });
+  })
+);
+
+// PUT /admin/masters/:id/schedule — полная замена расписания недели.
+// body: { schedule: [{ weekday, start_minutes, end_minutes }] }
+router.put(
+  '/masters/:id/schedule',
+  asyncH(async (req, res) => {
+    const id = v.intId(req.params.id, 'id');
+    if (!q.masterById(id)) return res.status(404).json({ error: { message: 'Мастер не найден.', code: 'NOT_FOUND' } });
+    if (!Array.isArray(req.body.schedule)) {
+      return res.status(400).json({ error: { message: 'Поле schedule должно быть массивом.', code: 'BAD_SCHEDULE' } });
+    }
+    const rows = req.body.schedule.map((row, idx) => {
+      const weekday = v.boundedInt(row.weekday, `schedule[${idx}].weekday`, 0, 6);
+      const startMinutes = v.boundedInt(row.start_minutes, `schedule[${idx}].start_minutes`, 0, 1439);
+      const endMinutes = v.boundedInt(row.end_minutes, `schedule[${idx}].end_minutes`, 1, 1440);
+      if (endMinutes <= startMinutes) {
+        const err = new Error(`schedule[${idx}]: end_minutes должен быть больше start_minutes.`);
+        err.status = 400;
+        throw err;
+      }
+      return { weekday, start_minutes: startMinutes, end_minutes: endMinutes };
+    });
+    const weekdays = new Set(rows.map((r) => r.weekday));
+    if (weekdays.size !== rows.length) {
+      return res.status(400).json({ error: { message: 'Расписание: один день недели указан дважды.', code: 'DUP_WEEKDAY' } });
+    }
+    q.replaceMasterSchedule(id, rows);
+    return res.json({ schedule: q.masterSchedule(id) });
+  })
+);
+
+// ---------- Блокировки времени мастера ----------
+
+// GET /admin/masters/:id/work-blocks — перерывы/выходные мастера (фильтры ?from=&to=)
+router.get(
+  '/masters/:id/work-blocks',
+  asyncH(async (req, res) => {
+    const id = v.intId(req.params.id, 'id');
+    if (!q.masterById(id)) return res.status(404).json({ error: { message: 'Мастер не найден.', code: 'NOT_FOUND' } });
+    const fromLocal = req.query.from === undefined ? null : toDbLocal(parseUtcIso(req.query.from));
+    const toLocal = req.query.to === undefined ? null : toDbLocal(parseUtcIso(req.query.to));
+    return res.json({ work_blocks: q.listWorkBlocks(id, fromLocal, toLocal) });
+  })
+);
+
+// POST /admin/masters/:id/work-blocks — создать блокировку (перерыв/день-офф).
+// body: { starts_at (UTC ISO), ends_at (UTC ISO), reason? }
+router.post(
+  '/masters/:id/work-blocks',
+  asyncH(async (req, res) => {
+    const id = v.intId(req.params.id, 'id');
+    if (!q.masterById(id)) return res.status(404).json({ error: { message: 'Мастер не найден.', code: 'NOT_FOUND' } });
+    const startUtc = assertNotPast(parseUtcIso(req.body.starts_at), 'starts_at');
+    const endUtc = parseUtcIso(req.body.ends_at);
+    if (endUtc.getTime() <= startUtc.getTime()) {
+      return res.status(400).json({ error: { message: 'ends_at должен быть позже starts_at.', code: 'BAD_INTERVAL' } });
+    }
+    const reason = req.body.reason === undefined ? 'break' : v.enumValue(req.body.reason, 'reason', ['break', 'day_off', 'vacation', 'sick', 'other']);
+    const blockId = q.createWorkBlock({
+      masterId: id,
+      startsAtLocal: toDbLocal(startUtc),
+      endsAtLocal: toDbLocal(endUtc),
+      reason,
+    });
+    return res.status(201).json({ work_block: q.workBlockById(blockId) });
+  })
+);
+
+// DELETE /admin/work-blocks/:id — снять блокировку
+router.delete(
+  '/work-blocks/:id',
+  asyncH(async (req, res) => {
+    const id = v.intId(req.params.id, 'id');
+    if (!q.workBlockById(id)) return res.status(404).json({ error: { message: 'Блокировка не найдена.', code: 'NOT_FOUND' } });
+    q.deleteWorkBlock(id);
+    return res.status(204).end();
+  })
+);
+
+// ---------- Статистика ----------
+
+// GET /admin/stats — дашборд: всего записей, активные, сумма активных, число мастеров
+router.get(
+  '/stats',
+  asyncH(async (req, res) => {
+    return res.json(q.statsDashboard());
+  })
+);
+
+// ---------- Обратная связь клиентов ----------
+
+// GET /admin/feedback — все отзывы с фильтром ?status=new|read|answered
+router.get(
+  '/feedback',
+  asyncH(async (req, res) => {
+    const status = req.query.status === undefined
+      ? null
+      : v.enumValue(req.query.status, 'status', ['new', 'read', 'answered']);
+    return res.json({ feedback: q.listFeedback({ status }) });
+  })
+);
+
+// PATCH /admin/feedback/:id — сменить статус обращения (прочитано/отвечено)
+router.patch(
+  '/feedback/:id',
+  asyncH(async (req, res) => {
+    const id = v.intId(req.params.id, 'id');
+    const existing = q.feedbackById(id);
+    if (!existing) return res.status(404).json({ error: { message: 'Отзыв не найден.', code: 'NOT_FOUND' } });
+    const status = v.enumValue(req.body.status, 'status', ['new', 'read', 'answered']);
+    q.setFeedbackStatus(id, status);
+    return res.json({ feedback: q.serializeFeedback(q.feedbackById(id)) });
   })
 );
 

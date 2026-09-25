@@ -33,20 +33,64 @@ function touchLastLogin(id) {
   db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(nowDbLocal(), Number(id));
 }
 
-function publicUser(row, { clientId = null } = {}) {
+function publicUser(row, { roles = [], clientId = null } = {}) {
   if (!row) return null;
   return {
     id: row.id,
     username: row.username,
-    role: row.role,
+    roles,
     is_active: !!row.is_active,
     ...(clientId ? { client_id: clientId } : {}),
   };
 }
 
+// Роли пользователя — список (несколько ролей у одного человека).
+function userRoles(userId) {
+  return db
+    .prepare('SELECT role FROM user_roles WHERE user_id = ? ORDER BY role')
+    .all(Number(userId))
+    .map((r) => r.role);
+}
+
+function hasRole(userId, role) {
+  return !!db
+    .prepare('SELECT 1 AS hit FROM user_roles WHERE user_id = ? AND role = ?')
+    .get(Number(userId), role);
+}
+
+// ---------- Сессии входа ----------
+
+// Выдаём клиенту случайный токен, в БД храним только его SHA-256:
+// createSession возвращает { token, tokenHash, expiresAtUtc }.
+// expiresAtLocal — локальное время истечения (БД хранит локальное время салона).
+function createSession({ userId, tokenHash, expiresAtLocal }) {
+  const info = db
+    .prepare('INSERT INTO auth_sessions (user_id, token_hash, created_at, expires_at) VALUES (?, ?, ?, ?)')
+    .run(Number(userId), tokenHash, nowDbLocal(), expiresAtLocal);
+  return info.lastInsertRowid;
+}
+
+function sessionByTokenHash(tokenHash) {
+  return db
+    .prepare('SELECT id, user_id FROM auth_sessions WHERE token_hash = ? AND revoked_at IS NULL AND expires_at > ?')
+    .get(tokenHash, nowDbLocal());
+}
+
+function revokeSessionByTokenHash(tokenHash) {
+  db.prepare('UPDATE auth_sessions SET revoked_at = ? WHERE token_hash = ?').run(nowDbLocal(), tokenHash);
+}
+
+// Cleanup-задача: удаляем истёкшие и отозванные сессии.
+function purgeExpiredSessions() {
+  const info = db
+    .prepare('DELETE FROM auth_sessions WHERE expires_at <= ? OR revoked_at IS NOT NULL')
+    .run(nowDbLocal());
+  return info.changes;
+}
+
 // ---------- Каталоги ----------
 
-// client_id текущего пользователя (для role='client'), иначе null
+// client_id текущего пользователя (для роли 'client'), иначе null
 function clientIdForUser(userId) {
   const row = db.prepare('SELECT id FROM clients WHERE user_id = ?').get(Number(userId));
   return row ? row.id : null;
@@ -100,6 +144,138 @@ function masterById(id) {
 
 function serviceById(id) {
   return db.prepare('SELECT * FROM services WHERE id = ?').get(Number(id));
+}
+
+// ---------- Информация о студии ----------
+
+// Одна строка studio_info (обычно id = 1). null — если сид ещё не засеял.
+function studioInfo() {
+  return db.prepare('SELECT id, studio_name, address, phone, telegram, map_hint, updated_at FROM studio_info ORDER BY id LIMIT 1').get();
+}
+
+// ---------- Расписание мастера (админ-управление) ----------
+
+function masterSchedule(masterId) {
+  return db
+    .prepare('SELECT id, master_id, weekday, start_minutes, end_minutes FROM master_schedule WHERE master_id = ? ORDER BY weekday')
+    .all(Number(masterId));
+}
+
+// Полная замена расписания недели мастера: DELETE + INSERT в одной транзакции.
+// rows: [{ weekday, start_minutes, end_minutes }] — без id (идемпотентно).
+function replaceMasterSchedule(masterId, rows) {
+  db.transaction(() => {
+    db.prepare('DELETE FROM master_schedule WHERE master_id = ?').run(Number(masterId));
+    const ins = db.prepare(
+      'INSERT INTO master_schedule (master_id, weekday, start_minutes, end_minutes) VALUES (?, ?, ?, ?)'
+    );
+    for (const r of rows) {
+      ins.run(Number(masterId), Number(r.weekday), Number(r.start_minutes), Number(r.end_minutes));
+    }
+  })();
+}
+
+// ---------- Блокировки времени мастера (перерывы, выходные и т.п.) ----------
+
+function listWorkBlocks(masterId, fromLocal = null, toLocal = null) {
+  const conds = ['master_id = ?'];
+  const params = [Number(masterId)];
+  if (fromLocal) { conds.push('ends_at > ?'); params.push(fromLocal); }
+  if (toLocal) { conds.push('starts_at < ?'); params.push(toLocal); }
+  return db
+    .prepare(`SELECT id, master_id, starts_at, ends_at, reason FROM work_blocks WHERE ${conds.join(' AND ')} ORDER BY starts_at`)
+    .all(...params);
+}
+
+function workBlockById(id) {
+  return db.prepare('SELECT id, master_id, starts_at, ends_at, reason FROM work_blocks WHERE id = ?').get(Number(id));
+}
+
+function createWorkBlock({ masterId, startsAtLocal, endsAtLocal, reason = 'break' }) {
+  const info = db
+    .prepare('INSERT INTO work_blocks (master_id, starts_at, ends_at, reason) VALUES (?, ?, ?, ?)')
+    .run(Number(masterId), startsAtLocal, endsAtLocal, reason);
+  return info.lastInsertRowid;
+}
+
+function deleteWorkBlock(id) {
+  return db.prepare('DELETE FROM work_blocks WHERE id = ?').run(Number(id));
+}
+
+// ---------- Обратная связь клиентов (отзывы, жалобы, вопросы) ----------
+
+function createFeedback({ clientId, text }) {
+  const info = db
+    .prepare("INSERT INTO client_feedback (client_id, text, status, created_at) VALUES (?, ?, 'new', ?)")
+    .run(Number(clientId), text, nowDbLocal());
+  return info.lastInsertRowid;
+}
+
+function feedbackById(id) {
+  const row = db
+    .prepare(`
+      SELECT f.id, f.text, f.status, f.created_at,
+             c.id AS client_id, c.name AS client_name, c.phone AS client_phone
+      FROM client_feedback f JOIN clients c ON c.id = f.client_id
+      WHERE f.id = ?`)
+    .get(Number(id));
+  return row;
+}
+
+// Отзыв для ответа — имя/телефон клиента допустимы для владельца и мастера.
+function serializeFeedback(row) {
+  return {
+    id: row.id,
+    text: row.text,
+    status: row.status,
+    created_at: dbLocalToUtcIso(row.created_at),
+    client: row.client_id
+      ? { id: row.client_id, name: row.client_name, phone: row.client_phone }
+      : null,
+  };
+}
+
+// Свои отзывы клиента (для GET /feedback)
+function listFeedback({ clientId = null, status = null } = {}) {
+  const conds = ['1=1'];
+  const params = [];
+  if (clientId) { conds.push('f.client_id = ?'); params.push(clientId); }
+  if (status) { conds.push('f.status = ?'); params.push(status); }
+  const rows = db
+    .prepare(`
+      SELECT f.id, f.text, f.status, f.created_at,
+             c.id AS client_id, c.name AS client_name, c.phone AS client_phone
+      FROM client_feedback f JOIN clients c ON c.id = f.client_id
+      WHERE ${conds.join(' AND ')}
+      ORDER BY f.created_at DESC`)
+    .all(...params);
+  return rows.map(serializeFeedback);
+}
+
+function setFeedbackStatus(id, status) {
+  db.prepare('UPDATE client_feedback SET status = ? WHERE id = ?').run(status, Number(id));
+}
+
+// ---------- Статистика для админ-панели ----------
+
+// Дашборд (прототип admin.html#statCounts): итого записей, активные,
+// сумма активных (цена услуги на момент), число мастеров.
+function statsDashboard() {
+  const totals = db
+    .prepare(`
+      SELECT
+        COUNT(*) AS total_bookings,
+        SUM(CASE WHEN status IN ('wait','confirmed') THEN 1 ELSE 0 END) AS active_bookings,
+        SUM(CASE WHEN status IN ('wait','confirmed') THEN (SELECT price_kopecks FROM services s WHERE s.id = b.service_id) ELSE 0 END) AS active_sum_kopecks
+      FROM bookings b`)
+    .get();
+  const mastersCount = db.prepare('SELECT COUNT(*) AS n FROM masters').get().n;
+  return {
+    total_bookings: totals.total_bookings,
+    active_bookings: totals.active_bookings || 0,
+    active_sum_kopecks: totals.active_sum_kopecks || 0,
+    masters_count: mastersCount,
+  };
 }
 
 // ---------- Свободное время / конфликты ----------
@@ -320,6 +496,12 @@ module.exports = {
   userById,
   touchLastLogin,
   publicUser,
+  userRoles,
+  hasRole,
+  createSession,
+  sessionByTokenHash,
+  revokeSessionByTokenHash,
+  purgeExpiredSessions,
   clientIdForUser,
   clientById,
   listServices,
@@ -327,6 +509,19 @@ module.exports = {
   servicesOfMaster,
   masterById,
   serviceById,
+  studioInfo,
+  masterSchedule,
+  replaceMasterSchedule,
+  listWorkBlocks,
+  workBlockById,
+  createWorkBlock,
+  deleteWorkBlock,
+  statsDashboard,
+  createFeedback,
+  feedbackById,
+  serializeFeedback,
+  listFeedback,
+  setFeedbackStatus,
   scheduleForWeekday,
   getBusyIntervals,
   createHold,

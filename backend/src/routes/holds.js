@@ -8,10 +8,10 @@ const crypto = require('crypto');
 const db = require('../db/connection');
 const q = require('../repo/queries');
 const { freeSlots } = require('../lib/availability');
-const { parseUtcIso, parseSalonDate, nowDbLocal, toDbLocal, salonDayStart } = require('../lib/time');
+const { parseUtcIso, parseSalonDate, nowDbLocal, toDbLocal, salonDayStart, assertNotPast } = require('../lib/time');
 const v = require('../lib/validate');
 const { asyncH } = require('../lib/http');
-const { requireRole } = require('../middleware/auth');
+const { requireRole, hasRole } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -95,7 +95,7 @@ router.post(
     }
     const totalMinutes = services.reduce((sum, s) => sum + s.duration_minutes, 0);
 
-    const startUtc = parseUtcIso(req.body.starts_at);
+    const startUtc = assertNotPast(parseUtcIso(req.body.starts_at), 'starts_at');
     const endsAtUtc = new Date(startUtc.getTime() + totalMinutes * 60000);
 
     // Проверяем: слот свободен именно в этот момент (точное попадание)
@@ -159,7 +159,7 @@ router.delete(
     const holdId = v.intId(req.params.id, 'id');
     const hold = q.holdById(holdId);
     if (!hold) return res.status(404).json({ error: { message: 'Удержание не найдено.', code: 'NOT_FOUND' } });
-    if (hold.created_by !== req.user.id && req.user.role !== 'owner') {
+    if (hold.created_by !== req.user.id && !hasRole(req.user, 'owner')) {
       return res.status(403).json({ error: { message: 'Недостаточно прав.', code: 'FORBIDDEN' } });
     }
     if (hold.status !== 'active') {

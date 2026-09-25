@@ -4,13 +4,11 @@
 // паролей, мастера, услуги, график, клиенты и записи на ближайшие рабочие дни.
 // Повторный запуск безопасен: уже существующие данные не дублируются.
 
-const bcrypt = require('bcryptjs');
+const { hashPassword } = require('../lib/passwords');
 
 const config = require('../config');
 const db = require('./connection');
 const q = require('../repo/queries');
-
-const BCRYPT_COST = 12;
 
 function ts() {
   return new Date().toISOString().slice(0, 19).replace('T', ' ');
@@ -45,12 +43,31 @@ const hasLink = db.prepare('SELECT 1 FROM master_services WHERE master_id = ? AN
 const hasBooking = db.prepare('SELECT 1 FROM bookings WHERE master_id = ? AND starts_at = ?');
 const hasStudio = db.prepare('SELECT 1 FROM studio_info WHERE id = 1');
 
-// 1. Три пользователя: администратор, мастер, клиент (роли из users.role)
-//    Пароли храним только хешем (bcrypt cost=12) — как в боевом коде.
+// 1. Пользователи: роли — СПИСКОМ (user_roles), у одного человека может быть
+//    несколько ролей. Пароли храним только хешем scrypt (соль + параметры
+//    стойкости в самом хеше) — как в боевом коде (lib/passwords.js).
+//    Сами пароли в код не зашиты: берутся из окружения SEED_*_PASSWORD.
+//    В development срабатывает dev-дефолт (для локального сида); в production
+//    пароль обязателен — fail-fast, чтобы сид не создавал слабые учётки.
+const DEV_SEED_PASSWORDS = {
+  admin: 'admin12345',
+  master: 'master12345',
+  client: 'client12345',
+};
+
+function seedPassword(username) {
+  const envKey = `SEED_${username.toUpperCase()}_PASSWORD`;
+  if (process.env[envKey]) return process.env[envKey];
+  if (config.isProduction) {
+    throw new Error(`[seed] ${envKey} обязателен при NODE_ENV=production.`);
+  }
+  return DEV_SEED_PASSWORDS[username];
+}
+
 const USERS = [
-  { username: 'admin', password: 'admin12345', role: 'owner', masterName: null },
-  { username: 'master', password: 'master12345', role: 'master', masterName: 'Екатерина' },
-  { username: 'client', password: 'client12345', role: 'client', masterName: null },
+  { username: 'admin', password: seedPassword('admin'), roles: ['owner'], masterName: null },
+  { username: 'master', password: seedPassword('master'), roles: ['master'], masterName: 'Екатерина' },
+  { username: 'client', password: seedPassword('client'), roles: ['client'], masterName: null },
 ];
 
 // 2. Два мастера с профилями и специализациями
@@ -165,13 +182,20 @@ function insertMasters(serviceIds) {
 }
 
 function insertUsers(masterIds) {
-  const ins = db.prepare(
-    'INSERT INTO users (username, password_hash, master_id, role, is_active) VALUES (?, ?, ?, ?, 1)'
+  const insUser = db.prepare(
+    'INSERT INTO users (username, password_hash, master_id, is_active) VALUES (?, ?, ?, 1)'
   );
+  const insRole = db.prepare('INSERT INTO user_roles (user_id, role) VALUES (?, ?)');
   for (const u of USERS) {
     if (hasUser.get(u.username)) continue;
-    const hash = bcrypt.hashSync(u.password, BCRYPT_COST);
-    ins.run(u.username, hash, u.masterName ? masterIds[u.masterName] : null, u.role);
+    const id = insUser.run(
+      u.username,
+      hashPassword(u.password),
+      u.masterName ? masterIds[u.masterName] : null
+    ).lastInsertRowid;
+    for (const role of u.roles) {
+      insRole.run(Number(id), role);
+    }
     counts.users += 1;
   }
 }
@@ -249,9 +273,12 @@ function summary() {
   };
 
   line('Пользователи', db
-    .prepare('SELECT username, role, is_active FROM users ORDER BY id')
+    .prepare(`
+      SELECT u.username, u.is_active,
+             (SELECT GROUP_CONCAT(role, ', ') FROM user_roles r WHERE r.user_id = u.id) AS roles
+      FROM users u ORDER BY u.id`)
     .all()
-    .map((u) => `${u.username} — роль: ${u.role}, активен: ${u.is_active ? 'да' : 'нет'}`));
+    .map((u) => `${u.username} — роли: ${u.roles || '(нет)'}, активен: ${u.is_active ? 'да' : 'нет'}`));
 
   line('Мастера', db
     .prepare('SELECT name, role, experience_years FROM masters ORDER BY id')

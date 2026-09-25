@@ -61,6 +61,14 @@ function nonNegInt(value, field) {
   return n;
 }
 
+function boundedInt(value, field, min, max) {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < min || n > max) {
+    bad(`Поле «${field}» должно быть целым числом от ${min} до ${max}.`);
+  }
+  return n;
+}
+
 // Список положительных целых (например id услуг) из строки «1,2,3» или массива
 function idList(value, field) {
   let raw;
@@ -102,6 +110,7 @@ module.exports = {
   intId,
   positiveInt,
   nonNegInt,
+  boundedInt,
   idList,
   bool,
   enumValue,

@@ -17,7 +17,6 @@
     "db:backup": "node src/db/backup.js"
   },
   "dependencies": {
-    "bcryptjs": "^2.4.3",
     "dotenv": "^16.4.0",
     "express": "^4.21.2"
   }

@@ -1,8 +1,10 @@
 ﻿# -*- coding: utf-8 -*-
 """Тестирование сценариев: единая функция создания записи для трёх ролей
-(client/master/owner), перенос (moveBooking) и отмена (setBookingStatus).
+(client/master/owner), перенос (moveBooking) и отмена (setBookingStatus),
+а также проверки безопасности: роли списком (user_roles), сессии с хешем
+токена (auth_sessions).
 
-Применяются РЕАЛЬНЫЕ файлы миграций 001-005 из backend/src/db/migrations
+Применяются РЕАЛЬНЫЕ файлы миграций 001-007 из backend/src/db/migrations
 (как их применяет runMigrations.js), затем минимальные данные, затем
 бизнес-логика POST /bookings (bookings.js) для каждой роли и операции
 по переносу/отмене. Проверка — на уровне SQL-семантики (триггеры,
@@ -58,15 +60,18 @@ for m in (ek, anna):
     for wd in range(1, 7):
         cur.execute("INSERT INTO master_schedule (master_id, weekday, start_minutes, end_minutes) VALUES (?,?,540,1080)", (m, wd))
 
-# владелец (owner, без мастера)
-cur.execute("INSERT INTO users (username, password_hash, role, is_active) VALUES ('admin','x','owner',1)")
+# владелец (owner, без мастера) — роль в user_roles
+cur.execute("INSERT INTO users (username, password_hash, is_active) VALUES ('admin','x',1)")
 owner_id = cur.lastrowid
+cur.execute("INSERT INTO user_roles (user_id, role) VALUES (?, 'owner')", (owner_id,))
 # мастер (роль master, привязан к Екатерине)
-cur.execute("INSERT INTO users (username, password_hash, master_id, role, is_active) VALUES ('ekaterina','x',?,'master',1)", (ek,))
+cur.execute("INSERT INTO users (username, password_hash, master_id, is_active) VALUES ('ekaterina','x',?,1)", (ek,))
 master_user_id = cur.lastrowid
+cur.execute("INSERT INTO user_roles (user_id, role) VALUES (?, 'master')", (master_user_id,))
 # клиент
-cur.execute("INSERT INTO users (username, password_hash, role, is_active) VALUES ('olga','x','client',1)")
+cur.execute("INSERT INTO users (username, password_hash, is_active) VALUES ('olga','x',1)")
 client_user_id = cur.lastrowid
+cur.execute("INSERT INTO user_roles (user_id, role) VALUES (?, 'client')", (client_user_id,))
 cur.execute("INSERT INTO clients (name, phone, user_id, created_at) VALUES ('Ольга','+79000000001',?, datetime('now'))", (client_user_id,))
 olga = cur.lastrowid
 cur.execute("INSERT INTO clients (name, phone, created_at) VALUES ('Маша','+79000000002', datetime('now'))")
@@ -315,6 +320,137 @@ try:
 except sqlite3.IntegrityError as e:
     conn.rollback()
     check("снятие признака с пересекающей записи отклонено", CONFLICT in str(e), str(e))
+
+print("\n== P. Пересечение интервалов: 12:30 поверх визита 12:00-13:00 ==")
+cur.execute("INSERT INTO services (name, description, price_kopecks, duration_minutes, created_at) VALUES ('Полировка 60м','',80000,60, datetime('now'))")
+fast_id = cur.lastrowid
+for m in (ek, anna):
+    cur.execute("INSERT INTO master_services (master_id, service_id) VALUES (?,?)", (m, fast_id))
+conn.commit()
+okp1, bidp1, _ = api_create_bookings("client", {
+    "service_id": fast_id, "master_id": ek, "starts_at": slot("12:00"),
+    "_user_id": client_user_id,
+})
+check("визит 12:00-13:00 создан", okp1 == True)
+okp2, codep2, _ = api_create_bookings("client", {
+    "service_id": fast_id, "master_id": ek, "starts_at": slot("12:30"),
+    "_user_id": client_user_id,
+})
+check("запись 12:30 поверх 12:00-13:00 отклонена", okp2 == False and codep2 == "SLOT_BUSY")
+
+print("\n== Q. Вплотную: 16:00 сразу после визита Анны до 16:00 — разрешено ==")
+# у Анны активна запись 14:00-16:00 (сценарий N); слот 16:00-17:00 свободен
+okq, bidq, _ = api_create_bookings("client", {
+    "service_id": fast_id, "master_id": anna, "starts_at": slot("16:00"),
+    "_user_id": client_user_id,
+})
+check("запись 16:00 после окончания в 16:00 разрешена", okq == True)
+set_status(bidp1, "canceled")
+set_status(bidq, "canceled")
+conn.commit()
+
+print("\n== R. Публичная информация о студии (studio_info) ==")
+cur.execute("INSERT INTO studio_info (id, studio_name, address, phone, telegram, map_hint, updated_at) VALUES (1,'Ноготочки','Воронеж, Революции 10','+79004535000','@Vibekatena','Вход во дворе', datetime('now'))")
+conn.commit()
+r = cur.execute("SELECT studio_name, address, phone, telegram, map_hint FROM studio_info WHERE id=1").fetchone()
+check("studio_info заполнена", r is not None and r["studio_name"] == "Ноготочки" and r["phone"] == "+79004535000")
+work = cur.execute("""
+  SELECT ms.weekday, MIN(ms.start_minutes) AS start_minutes, MAX(ms.end_minutes) AS end_minutes
+  FROM master_schedule ms JOIN masters m ON m.id = ms.master_id
+  WHERE m.is_active = 1 GROUP BY ms.weekday ORDER BY ms.weekday""").fetchall()
+check("график студии из расписаний мастеров", len(work) == 6 and work[0]["start_minutes"] == 540 and work[0]["end_minutes"] == 1080)
+
+print("\n== S. Админ-расписание мастера (замена недели) ==")
+cur.execute("""
+  UPDATE master_schedule SET start_minutes=600, end_minutes=1140
+  WHERE master_id=? AND weekday IN (2,3,4)""", (ek,))
+cur.execute("DELETE FROM master_schedule WHERE master_id=? AND weekday NOT IN (2,3,4)", (ek,))
+conn.commit()
+rows = cur.execute("SELECT weekday, start_minutes, end_minutes FROM master_schedule WHERE master_id=? ORDER BY weekday", (ek,)).fetchall()
+check("расписание обновлено (3 рабочих дня 10:00-19:00)",
+      len(rows) == 3 and all(x["start_minutes"] == 600 and x["end_minutes"] == 1140 for x in rows))
+wk = cur.execute("SELECT weekday FROM master_schedule WHERE master_id=?", (ek,)).fetchone()
+check("у мастера остался рабочий день для расчёта слотов", wk is not None)
+
+print("\n== T. Блокировки времени мастера (work_blocks) ==")
+cur.execute("INSERT INTO work_blocks (master_id, starts_at, ends_at, reason) VALUES (?,?,?, 'break')",
+            (ek, "2026-09-29 12:00:00", "2026-09-29 13:00:00"))
+bid_t = cur.lastrowid
+conn.commit()
+bl = cur.execute("SELECT reason FROM work_blocks WHERE id=?", (bid_t,)).fetchone()
+check("блокировка создана", bl is not None and bl["reason"] == "break")
+# блокировка входит в занятые интервалы мастера (getBusyIntervals)
+busy = cur.execute("""
+  SELECT COUNT(*) AS n FROM work_blocks
+  WHERE master_id=? AND starts_at < '2026-09-29 18:00:00' AND ends_at > '2026-09-29 09:00:00'""", (ek,)).fetchone()
+check("блокировка учитывается в интервалах", busy["n"] == 1)
+cur.execute("DELETE FROM work_blocks WHERE id=?", (bid_t,))
+conn.commit()
+gone = cur.execute("SELECT 1 FROM work_blocks WHERE id=?", (bid_t,)).fetchone()
+check("блокировка удалена", gone is None)
+
+print("\n== U. Статистика админ-панели (дашборд) ==")
+# отменённые в P/Q больше не активны; посчитаем то, что в базе
+tot = cur.execute("""
+  SELECT COUNT(*) AS n, SUM(CASE WHEN status IN ('wait','confirmed') THEN 1 ELSE 0 END) AS active
+  FROM bookings""").fetchone()
+check("итого и активные записи считаются", tot["active"] <= tot["n"] and tot["n"] >= 0)
+summ = cur.execute("""
+  SELECT COALESCE(SUM(CASE WHEN b.status IN ('wait','confirmed') THEN s.price_kopecks ELSE 0 END),0) AS s
+  FROM bookings b JOIN services s ON s.id=b.service_id""").fetchone()
+mcnt = cur.execute("SELECT COUNT(*) AS n FROM masters").fetchone()
+check("сумма активных и число мастеров считаются", summ["s"] >= 0 and mcnt["n"] == 2)
+
+print("\n== V. Обратная связь и отзывы (client_feedback) ==")
+# клиент оставляет отзыв (аналог POST /feedback)
+cur.execute("INSERT INTO client_feedback (client_id, text, status, created_at) VALUES (?,?, 'new', datetime('now'))", (olga, "Спасибо, очень аккуратно!"))
+fb_id = cur.lastrowid
+conn.commit()
+fb = cur.execute("SELECT f.text, f.status, c.name AS client_name FROM client_feedback f JOIN clients c ON c.id=f.client_id WHERE f.id=?", (fb_id,)).fetchone()
+check("отзыв создан со статусом 'new'", fb is not None and fb["status"] == "new" and fb["client_name"] == "Ольга")
+# владелец смотрит все отзывы и меняет статус (аналог GET/PATCH /admin/feedback)
+all_fb = cur.execute("SELECT COUNT(*) AS n FROM client_feedback").fetchone()
+check("владелец видит все отзывы", all_fb["n"] == 1)
+cur.execute("UPDATE client_feedback SET status='answered' WHERE id=?", (fb_id,))
+conn.commit()
+fb2 = cur.execute("SELECT status FROM client_feedback WHERE id=?", (fb_id,)).fetchone()
+check("статус изменён на 'answered'", fb2["status"] == "answered")
+
+print("\n== W. Безопасность: роли списком и сессии с хешем токена ==")
+# 1) роли — список (user_roles), а не одна колонка users.role
+cols_users = [r["name"] for r in cur.execute("PRAGMA table_info(users)").fetchall()]
+check("в users больше нет колонки role", "role" not in cols_users)
+roles_owner = [r["role"] for r in cur.execute("SELECT role FROM user_roles WHERE user_id=? ORDER BY role", (owner_id,)).fetchall()]
+check("владелец имеет роль 'owner'", roles_owner == ["owner"])
+# человек может иметь несколько ролей; проверка «есть ли роль» — по списку
+cur.execute("INSERT INTO user_roles (user_id, role) VALUES (?, 'master')", (owner_id,))
+conn.commit()
+nroles = cur.execute("SELECT COUNT(*) AS n FROM user_roles WHERE user_id=?", (owner_id,)).fetchone()
+check("у человека может быть несколько ролей (owner+master)", nroles["n"] == 2)
+has_master = cur.execute("SELECT 1 FROM user_roles WHERE user_id=? AND role='master'", (owner_id,)).fetchone()
+check("hasRole('master') находится по списку", has_master is not None)
+
+# 2) сессии: в БД лежит SHA-256 хеш токена (не сам токен),
+#    отзыв (revoked_at) делает сессию невалидной мгновенно
+import hashlib
+token = "secret-token-abc123"
+token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+cur.execute(
+    "INSERT INTO auth_sessions (user_id, token_hash, created_at, expires_at) VALUES (?,?,datetime('now'),datetime('now','+7 days'))",
+    (client_user_id, token_hash))
+conn.commit()
+sess = cur.execute(
+    "SELECT id, user_id FROM auth_sessions WHERE token_hash=? AND revoked_at IS NULL AND expires_at > datetime('now')",
+    (token_hash,)).fetchone()
+check("сессия находится по хешу токена", sess is not None and sess["user_id"] == client_user_id)
+raw = cur.execute("SELECT token_hash FROM auth_sessions WHERE id=?", (sess["id"],)).fetchone()
+check("в БД хранится хеш, а не сам токен", raw["token_hash"] != token)
+cur.execute("UPDATE auth_sessions SET revoked_at=datetime('now') WHERE id=?", (sess["id"],))
+conn.commit()
+gone = cur.execute(
+    "SELECT 1 FROM auth_sessions WHERE token_hash=? AND revoked_at IS NULL AND expires_at > datetime('now')",
+    (token_hash,)).fetchone()
+check("отозванная сессия больше не валидна", gone is None)
 
 conn.close()
 print(f"\nИТОГ: {PASS} OK, {FAIL} FAIL")

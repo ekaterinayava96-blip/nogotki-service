@@ -33,12 +33,6 @@ if (isProduction) {
       '[config] Файл .env найден, но пакет dotenv не установлен — выполните npm install.'
     );
   }
-  const secret = requireProd('AUTH_SECRET');
-  if (secret.length < 16) {
-    throw new Error(
-      '[config] AUTH_SECRET короче 16 символов — укажите длинное случайное значение.'
-    );
-  }
   requireProd('DB_PATH');
 }
 
@@ -51,11 +45,19 @@ if (!Number.isInteger(port) || port < 0 || port > 65535) {
 // Время жизни токена доступа по умолчанию (сек.)
 const AUTH_TTL_SECONDS = Number(process.env.AUTH_TTL_SECONDS || 7 * 24 * 3600);
 
+// Число доверенных reverse-proxy перед приложением. Нужно, чтобы rate limit
+// по IP видел реального клиента (X-Forwarded-For), а не адрес nginx/балансировщика.
+// TRUST_PROXY не задан/0/false — приложение слушает напрямую (req.ip = адрес сокета).
+const TRUST_PROXY_RAW = (process.env.TRUST_PROXY || '').trim().toLowerCase();
+const trustProxy = TRUST_PROXY_RAW === '' || TRUST_PROXY_RAW === '0' || TRUST_PROXY_RAW === 'false'
+  ? false
+  : (Number(TRUST_PROXY_RAW) >= 0 ? Number(TRUST_PROXY_RAW) : 1);
+
 module.exports = {
   port,
   dbPath: path.resolve(__dirname, '..', process.env.DB_PATH || 'data/nogotki.db'),
   nodeEnv,
   isProduction,
-  authSecret: (process.env.AUTH_SECRET || '').trim(),
+  trustProxy,
   authTtlSeconds: Number.isInteger(AUTH_TTL_SECONDS) && AUTH_TTL_SECONDS > 0 ? AUTH_TTL_SECONDS : 7 * 24 * 3600,
 };

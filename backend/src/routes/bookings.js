@@ -8,10 +8,10 @@ const crypto = require('crypto');
 
 const db = require('../db/connection');
 const q = require('../repo/queries');
-const { parseUtcIso, toDbLocal, salonDayStart, nowDbLocal } = require('../lib/time');
+const { parseUtcIso, toDbLocal, salonDayStart, nowDbLocal, assertNotPast } = require('../lib/time');
 const v = require('../lib/validate');
 const { asyncH, isBookingTimeConflict, sendSlotConflict } = require('../lib/http');
-const { requireRole, authRequired } = require('../middleware/auth');
+const { requireRole, authRequired, hasRole } = require('../middleware/auth');
 const { freeSlots } = require('../lib/availability');
 
 const router = express.Router();
@@ -58,7 +58,7 @@ router.post(
     // поэтому это административная возможность. У client/master поле в запросе
     // просто не читается — эффект тот же, что и при отсутствии поля.
     const wantForce = v.bool(req.body.force_override, 'force_override');
-    const forceOverride = req.user.role === 'owner' ? (wantForce ?? 0) : 0;
+    const forceOverride = hasRole(req.user, 'owner') ? (wantForce ?? 0) : 0;
 
     const service = q.serviceById(serviceId);
     if (!service || service.is_active !== 1) {
@@ -79,7 +79,7 @@ router.post(
 
     // Мастер (роль) создаёт записи только в свой график — отличия в правах
     // ролей допустимы, сам путь создания записи общий (createBooking).
-    if (req.user.role === 'master') {
+    if (hasRole(req.user, 'master')) {
       const user = q.userById(req.user.id);
       if (!user || !user.master_id || masterId !== user.master_id) {
         return res.status(403).json({ error: { message: 'Мастер может создавать записи только в свой график.', code: 'FORBIDDEN' } });
@@ -90,7 +90,7 @@ router.post(
     // owner/master записывают клиента по client_id из тела (административная
     // функция сотрудника), client — всегда сам.
     let clientId;
-    if (req.user.role === 'owner' || req.user.role === 'master') {
+    if (hasRole(req.user, 'owner') || hasRole(req.user, 'master')) {
       clientId = req.body.client_id === undefined ? null : v.intId(req.body.client_id, 'client_id');
       if (!clientId || !q.clientById(clientId)) {
         return res.status(400).json({ error: { message: 'Укажите существующего клиента (client_id).', code: 'CLIENT_REQUIRED' } });
@@ -120,7 +120,7 @@ router.post(
         q.purgeExpiredHolds();
         return res.status(409).json({ error: { message: 'Удержание истекло — повторите выбор времени.', code: 'HOLD_EXPIRED' } });
       }
-      if (hold.created_by !== req.user.id && req.user.role !== 'owner') {
+      if (hold.created_by !== req.user.id && !hasRole(req.user, 'owner')) {
         return res.status(403).json({ error: { message: 'Недостаточно прав.', code: 'FORBIDDEN' } });
       }
       if (hold.master_id !== masterId || hold.duration_minutes !== service.duration_minutes) {
@@ -135,7 +135,7 @@ router.post(
       // Осознанное наложение (force_override, только owner) пропускает эту
       // проверку: её заменит сам триггер, который для force_override = 1
       // разрешает пересечение с другими записями мастера.
-      const startUtc = parseUtcIso(req.body.starts_at);
+      const startUtc = assertNotPast(parseUtcIso(req.body.starts_at), 'starts_at');
       const endsAtUtc = new Date(startUtc.getTime() + service.duration_minutes * 60000);
       if (!forceOverride) {
         assertSlotFree(masterId, startUtc, endsAtUtc);
@@ -181,11 +181,11 @@ router.get(
   '/',
   authRequired,
   asyncH(async (req, res) => {
-    if (req.user.role === 'client') {
+    if (hasRole(req.user, 'client')) {
       const clientId = q.clientIdForUser(req.user.id);
       return res.json({ bookings: clientId ? q.listBookings({ clientId }) : [] });
     }
-    if (req.user.role === 'master') {
+    if (hasRole(req.user, 'master')) {
       const user = q.userById(req.user.id);
       return res.json({ bookings: user && user.master_id ? q.listBookings({ masterId: user.master_id }) : [] });
     }
@@ -230,7 +230,7 @@ router.patch(
       });
     }
 
-    const startUtc = parseUtcIso(req.body.starts_at);
+    const startUtc = assertNotPast(parseUtcIso(req.body.starts_at), 'starts_at');
     const totalMinutes = row.service_duration;
     const endUtc = new Date(startUtc.getTime() + totalMinutes * 60000);
     assertSlotFree(row.master_id, startUtc, endUtc);
@@ -271,12 +271,12 @@ router.post(
 );
 
 function checkAccess(user, row) {
-  if (user.role === 'owner') return;
-  if (user.role === 'master') {
+  if (hasRole(user, 'owner')) return;
+  if (hasRole(user, 'master')) {
     const u = q.userById(user.id);
     if (u && u.master_id === row.master_id) return;
   }
-  if (user.role === 'client') {
+  if (hasRole(user, 'client')) {
     const clientId = q.clientIdForUser(user.id);
     if (clientId === row.client_id) return;
   }

@@ -71,8 +71,27 @@ function parseSalonDate(input) {
     throw err;
   }
   const [y, mo, d] = input.split('-').map(Number);
-  const localMs = Date.UTC(y, mo - 1, d);
-  return new Date(localMs - SALON_OFFSET_MINUTES * 60000);
+  // Проверка существования даты в календаре: Date.UTC нормализует «2026-02-31»
+  // в 3 марта, поэтому сравниваем с получившимся значением напрямую.
+  const ts = Date.UTC(y, mo - 1, d);
+  const dt = new Date(ts);
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) {
+    const err = new Error('Некорректная дата: несуществующий день календаря.');
+    err.status = 400;
+    throw err;
+  }
+  return new Date(ts - SALON_OFFSET_MINUTES * 60000);
+}
+
+// Валидация «время не в прошлом» для входных данных записи/удержания.
+// date — уже разобранный parseUtcIso; отклоняем прошлое (400).
+function assertNotPast(date, fieldName = 'start') {
+  if (date.getTime() < Date.now()) {
+    const err = new Error(`Время "${fieldName}" не может быть в прошлом.`);
+    err.status = 400;
+    throw err;
+  }
+  return date;
 }
 
 // Текущий момент в формате БД (локальное салона)
@@ -86,6 +105,7 @@ module.exports = {
   dbLocalToUtcIso,
   parseUtcIso,
   parseSalonDate,
+  assertNotPast,
   salonDayStart,
   nowDbLocal,
 };

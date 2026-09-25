@@ -1,39 +1,34 @@
 'use strict';
 
-// Аутентификация и авторизация. Токен: «Authorization: Bearer <jwt>».
-// В payload: sub (id пользователя), role, username, jti, iat, exp.
+// Аутентификация и авторизация. Токен: «Authorization: Bearer <random>».
+// Сам токен клиенту выдаётся один раз и нигде не сохраняется полностью:
+// в БД (auth_sessions) лежит только его SHA-256 + срок действия + отзыв.
+// Роли читаются из user_roles на КАЖДЫЙ запрос — не из payload токена и
+// не из данных запроса. Права: «есть ли у пользователя нужная роль».
+
+const crypto = require('crypto');
 
 const config = require('../config');
-const { sign, verify } = require('../lib/tokens');
+const q = require('../repo/queries');
+const { toDbLocal } = require('../lib/time');
 
-// Чёрный список отозванных jti (для «выхода»): до их срока действия.
-// Память процесса: на самом деле достаточно, т.к. токены короткоживущие.
-const revoked = new Map();
-
-function secret() {
-  if (!config.authSecret) {
-    throw new Error('[auth] AUTH_SECRET не задан — API не может выпускать токены.');
-  }
-  return config.authSecret;
+function sha256Hex(value) {
+  return crypto.createHash('sha256').update(value, 'utf8').digest('hex');
 }
 
+// Выпуск сессии: создаёт случайный токен, в БД кладёт его хеш + срок жизни.
 function issueToken(user) {
-  const jti = require('crypto').randomUUID();
-  const now = Math.floor(Date.now() / 1000);
-  const payload = {
-    sub: user.id,
-    role: user.role,
-    username: user.username,
-    jti,
-    iat: now,
-    exp: now + config.authTtlSeconds,
-  };
-  return sign(payload, secret());
-}
-
-function revokeJti(jti) {
-  if (typeof jti !== 'string') return;
-  revoked.set(jti, Date.now());
+  const token = crypto.randomBytes(32).toString('base64url');
+  const tokenHash = sha256Hex(token);
+  const expiresAtLocal = toDbLocal(
+    new Date(Date.now() + config.authTtlSeconds * 1000)
+  );
+  q.createSession({
+    userId: user.id,
+    tokenHash,
+    expiresAtLocal,
+  });
+  return token;
 }
 
 function extract(req) {
@@ -42,21 +37,27 @@ function extract(req) {
   return m ? m[1] : null;
 }
 
+// Проверка токена по БД. Роли загружаются каждый раз из user_roles.
 function authenticate(req) {
   const token = extract(req);
   if (!token) return null;
-  const payload = verify(token, secret());
-  if (!payload) return null;
-  if (revoked.has(payload.jti)) return null;
-  if (isExpired(payload)) return null;
-  if (typeof payload.sub !== 'number' && typeof payload.sub !== 'string') return null;
-  req.user = { id: payload.sub, role: payload.role, username: payload.username };
+  const session = q.sessionByTokenHash(sha256Hex(token));
+  if (!session) return null;
+  const user = q.userById(session.user_id);
+  if (!user || user.is_active !== 1) return null;
+  req.user = {
+    id: user.id,
+    username: user.username,
+    roles: q.userRoles(user.id),
+    master_id: user.master_id,
+    is_active: !!user.is_active,
+  };
   return req.user;
 }
 
-function isExpired(payload) {
-  const now = Math.floor(Date.now() / 1000);
-  return typeof payload.exp !== 'number' || now >= payload.exp;
+// «Есть ли у пользователя роль» (роли — список).
+function hasRole(user, role) {
+  return !!user && Array.isArray(user.roles) && user.roles.includes(role);
 }
 
 // Требует вход; иначе 401
@@ -65,10 +66,11 @@ function authRequired(req, res, next) {
   if (!user) {
     return res.status(401).json({ error: { message: 'Требуется авторизация.', code: 'UNAUTHORIZED' } });
   }
+  req.user = user;
   next();
 }
 
-// Требует вход и одну из ролей; иначе 403
+// Требует вход и НАЛИЧИЕ хотя бы одной из ролей; иначе 403
 function requireRole(...roles) {
   return (req, res, next) => {
     const user = authenticate(req);
@@ -76,16 +78,26 @@ function requireRole(...roles) {
       return res.status(401).json({ error: { message: 'Требуется авторизация.', code: 'UNAUTHORIZED' } });
     }
     req.user = user;
-    if (!roles.includes(user.role)) {
+    const ok = roles.some((r) => hasRole(user, r));
+    if (!ok) {
       return res.status(403).json({ error: { message: 'Недостаточно прав.', code: 'FORBIDDEN' } });
     }
     next();
   };
 }
 
+// Отзыв сессии по выданному (нехешированному) токену.
+function revokeToken(token) {
+  if (typeof token !== 'string' || token === '') return;
+  q.revokeSessionByTokenHash(sha256Hex(token));
+}
+
 module.exports = {
   issueToken,
-  revokeJti,
+  extract,
+  authenticate,
+  hasRole,
+  revokeToken,
   authRequired,
   requireRole,
 };

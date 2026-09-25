@@ -9,24 +9,25 @@ const { boot } = require('./startup');
 const app = require('./app');
 const q = require('./repo/queries');
 
-if (!config.authSecret) {
-  console.error('[api] AUTH_SECRET не задан — поставьте его в backend/.env (см. .env.example).');
-  process.exit(1);
-}
+const CLEANUP_INTERVAL_MS = 60 * 1000; // раз в минуту
 
-const HOLD_CLEANUP_INTERVAL_MS = 60 * 1000; // раз в минуту
-
-function startHoldCleanup() {
+function startCleanup() {
   const cleanup = () => {
     try {
-      const removed = q.purgeExpiredHolds();
-      if (removed > 0) console.log(`[holds] Удалено истёкших удержаний: ${removed}`);
+      const removedHolds = q.purgeExpiredHolds();
+      if (removedHolds > 0) console.log(`[holds] Удалено истёкших удержаний: ${removedHolds}`);
     } catch (err) {
       console.error('[holds] Ошибка очистки удержаний:', err);
     }
+    try {
+      const removedSessions = q.purgeExpiredSessions();
+      if (removedSessions > 0) console.log(`[sessions] Удалено истёкших/отозванных сессий: ${removedSessions}`);
+    } catch (err) {
+      console.error('[sessions] Ошибка очистки сессий:', err);
+    }
   };
   cleanup();
-  const timer = setInterval(cleanup, HOLD_CLEANUP_INTERVAL_MS);
+  const timer = setInterval(cleanup, CLEANUP_INTERVAL_MS);
   timer.unref(); // не держим процесс из-за таймера
   return timer;
 }
@@ -36,6 +37,6 @@ const server = app.listen(config.port, () => {
 });
 
 boot({ server });
-startHoldCleanup();
+startCleanup();
 
 module.exports = { server };

@@ -4,15 +4,22 @@
 
 const express = require('express');
 
+const config = require('./config');
 const authRoutes = require('./routes/auth');
 const catalogRoutes = require('./routes/catalog');
 const holdsRoutes = require('./routes/holds');
 const bookingRoutes = require('./routes/bookings');
+const feedbackRoutes = require('./routes/feedback');
 const adminRoutes = require('./routes/admin');
 
 const app = express();
 
 app.disable('x-powered-by');
+// За reverse-proxy (nginx и т.п.) rate limit и req.ip должны видеть IP клиента,
+// а не адрес прокси. Число доверенных прокси задаётся в TRUST_PROXY (.env).
+if (config.trustProxy) {
+  app.set('trust proxy', config.trustProxy);
+}
 app.use(express.json({ limit: '64kb' }));
 
 // Для запросов без JSON-тела express.json оставляет req.body = undefined;
@@ -29,6 +36,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api', catalogRoutes);
 app.use('/api', holdsRoutes);
 app.use('/api', bookingRoutes);
+app.use('/api', feedbackRoutes);
 app.use('/api/admin', adminRoutes);
 
 // 404

@@ -429,14 +429,15 @@ CREATE TABLE clients (
 ### 3.11. `users` — учётные записи для входа в панель
 
 Владелец, мастера и клиенты входят в сервис. **Хранится только хеш пароля, самого пароля в базе нет.**
+Роли — не колонка, а **список** в таблице `user_roles` (§3.11.1): у одного человека может
+быть несколько ролей. Колонка `role` удалена миграцией 007.
 
 | Поле | Тип | Обяз. | Описание |
 |---|---|---|---|
 | `id` | INTEGER | PK, AUTOINCREMENT | Идентификатор |
 | `username` | TEXT | NOT NULL | Логин для входа |
-| `password_hash` | TEXT | NOT NULL | Хеш пароля (bcrypt/argon2 — высокая стоимость, например аргон2id или bcrypt cost=12). Пароль в открытом виде **никогда** не сохраняется |
+| `password_hash` | TEXT | NOT NULL | Хеш пароля scrypt: самодостаточный `scrypt$N$r$p$salt$hash` (встроенный `crypto.scrypt`, параметры стойкости и уникальная соль — в самом хеше). Пароль в открытом виде **никогда** не сохраняется |
 | `master_id` | INTEGER | NULL, UNIQUE | FK → masters.id; NULL для владельца, не являющегося мастером |
-| `role` | TEXT | NOT NULL, DEFAULT 'master' | `owner` — владелец, `master` — мастер, `client` — клиент |
 | `is_active` | INTEGER | NOT NULL, DEFAULT 1 | 1 — можно входить |
 | `last_login_at` | TEXT | NULL | Последний вход |
 
@@ -450,10 +451,62 @@ CREATE TABLE users (
   username      TEXT NOT NULL,
   password_hash TEXT NOT NULL,
   master_id     INTEGER UNIQUE REFERENCES masters(id),
-  role          TEXT NOT NULL DEFAULT 'master' CHECK (role IN ('owner','master','client')),
   is_active     INTEGER NOT NULL DEFAULT 1,
   last_login_at TEXT,
   UNIQUE (username)
+);
+```
+
+---
+
+### 3.11.1. `user_roles` — роли пользователя списком
+
+Роли хранятся как строки в отдельной таблице (миграция 007), чтобы один аккаунт мог
+иметь несколько ролей (`master` + `owner` и т.п.). Проверка прав — «есть ли нужная
+роль» (`user_roles` читается из базы на каждый запрос).
+
+| Поле | Тип | Обяз. | Описание |
+|---|---|---|---|
+| `user_id` | INTEGER | PK, FK | → users.id (CASCADE) |
+| `role` | TEXT | PK | `owner` / `master` / `client` |
+
+**PK:** `(user_id, role)`.
+
+```sql
+CREATE TABLE user_roles (
+  user_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role     TEXT NOT NULL CHECK (role IN ('owner','master','client')),
+  PRIMARY KEY (user_id, role)
+);
+```
+
+---
+
+### 3.11.2. `auth_sessions` — сессии входа (токены)
+
+При входе клиенту выписывается случайный токен; в базе хранится **только его SHA-256**
+(сам токен в БД не хранится), срок действия и отметка отзыва. Выход отзывает сессию
+сразу (`revoked_at`), истёкшие/отозванные сессии чистит фоновая задача.
+
+| Поле | Тип | Обяз. | Описание |
+|---|---|---|---|
+| `id` | INTEGER | PK, AUTOINCREMENT | Идентификатор сессии |
+| `user_id` | INTEGER | NOT NULL, FK | → users.id (CASCADE) |
+| `token_hash` | TEXT | NOT NULL, UNIQUE | SHA-256 от выданного клиенту токена |
+| `created_at` | TEXT | NOT NULL | Время выпуска (локальное салона) |
+| `expires_at` | TEXT | NOT NULL | Срок действия (TTL из `AUTH_TTL_SECONDS`) |
+| `revoked_at` | TEXT | NULL | Время отзыва (по выходу) |
+
+**Индексы:** `(user_id)`, `(expires_at)`.
+
+```sql
+CREATE TABLE auth_sessions (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash  TEXT NOT NULL UNIQUE,
+  created_at  TEXT NOT NULL,
+  expires_at  TEXT NOT NULL,
+  revoked_at  TEXT
 );
 ```
 
@@ -487,6 +540,34 @@ CREATE TABLE payments (
   external_id    TEXT,
   paid_at        TEXT,
   created_at     TEXT NOT NULL
+);
+```
+
+---
+
+### 3.13. `client_feedback` — обратная связь клиентов
+
+Отзывы, жалобы и вопросы клиентов (миграция 006). Клиент оставляет обращение через
+`POST /feedback`, владелец просматривает и меняет статус (`GET/PATCH /admin/feedback`).
+
+| Поле | Тип | Обяз. | Описание |
+|---|---|---|---|
+| `id` | INTEGER | PK, AUTOINCREMENT | Идентификатор отзыва |
+| `client_id` | INTEGER | NOT NULL | FK → clients.id |
+| `text` | TEXT | NOT NULL | Текст отзыва/жалобы (1–2000 симв.) |
+| `status` | TEXT | NOT NULL, DEFAULT 'new' | `new` — новая, `read` — прочитана, `answered` — отвечено |
+| `created_at` | TEXT | NOT NULL | Момент создания |
+
+**FK:** `client_id` → clients.id.
+
+```sql
+CREATE TABLE client_feedback (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  client_id  INTEGER NOT NULL REFERENCES clients(id),
+  text       TEXT NOT NULL CHECK (length(text) BETWEEN 1 AND 2000),
+  status     TEXT NOT NULL DEFAULT 'new'
+    CHECK (status IN ('new','read','answered')),
+  created_at TEXT NOT NULL
 );
 ```
 
@@ -620,11 +701,30 @@ CREATE TABLE users (
   username      TEXT NOT NULL,
   password_hash TEXT NOT NULL,
   master_id     INTEGER UNIQUE REFERENCES masters(id),
-  role          TEXT NOT NULL DEFAULT 'master' CHECK (role IN ('owner','master','client')),
   is_active     INTEGER NOT NULL DEFAULT 1,
   last_login_at TEXT,
   UNIQUE (username)
 );
+
+-- Роли списком (миграция 007): у человека может быть несколько ролей.
+CREATE TABLE user_roles (
+  user_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role     TEXT NOT NULL CHECK (role IN ('owner','master','client')),
+  PRIMARY KEY (user_id, role)
+);
+
+-- Сессии входа (миграция 007): в БД только SHA-256 выданного токена.
+CREATE TABLE auth_sessions (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash  TEXT NOT NULL UNIQUE,
+  created_at  TEXT NOT NULL,
+  expires_at  TEXT NOT NULL,
+  revoked_at  TEXT
+);
+
+CREATE INDEX idx_sessions_user    ON auth_sessions(user_id);
+CREATE INDEX idx_sessions_expires ON auth_sessions(expires_at);
 
 CREATE TABLE payments (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -648,7 +748,7 @@ CREATE TABLE payments (
 | Поле | Набор значений | Почему именно CHECK |
 |---|---|---|
 | `bookings.status` | `wait` (ожидает подтверждения) · `confirmed` · `done` · `canceled` | Статусы жёстко заданы логикой: избегает опечаток и «своих» статусов вроде «ОЖИДАЕТСЯ» |
-| `users.role` | `owner` · `master` · `client` | Роли фиксированы ролями продукта |
+| `user_roles.role` | `owner` · `master` · `client` | Роли фиксированы ролями продукта |
 | `payments.status` | `pending` · `paid` · `failed` · `refunded` | Машина состояний платежа |
 | `payments.provider` | `yookassa` · `sbp` · `cash` | Известные способы оплаты |
 | `bookings.source` | `web` · `telegram` | Два канала записи |
@@ -834,9 +934,9 @@ WHERE s.master_id = :M AND s.weekday = strftime('%w', :D)
 
 ### 7.2. Подтверждение: отдельной таблицы свободных слотов в схеме нет
 
-В схеме **11 таблиц**, и среди них **нет** `slots` / `free_slots` / любой таблицы, хранящей заранее подготовленные свободные времена. Это проверено:
+В схеме **13 таблиц**, и среди них **нет** `slots` / `free_slots` / любой таблицы, хранящей заранее подготовленные свободные времена. Это проверено:
 
-- Полный список таблиц (секция 3): `services`, `masters`, `studio_info`, `master_services`, `master_schedule`, `work_blocks`, `studio_closures`, `bookings`, `clients`, `users`, `payments`.
+- Полный список таблиц (секция 3): `services`, `masters`, `studio_info`, `master_services`, `master_schedule`, `work_blocks`, `studio_closures`, `bookings`, `clients`, `users`, `user_roles`, `auth_sessions`, `payments`.
 - Ни одна таблица не содержит поля «свободный/занятый слот» — время всегда получается запросом (§7.1).
 - Требование «свободное время вычисляется из графика работы, записей и блокировок в момент запроса» выполнено: вся логика опирается на `master_schedule` + `bookings` + `work_blocks`/`studio_closures`.
 
@@ -888,11 +988,17 @@ WHERE s.master_id = :M AND s.weekday = strftime('%w', :D)
 
 **Дискуссия:** стоит ли добавлять статус «отклонена» (`rejected`) и «не пришёл» (`no_show`)? **Выбор:** пока 4 статуса ровно из прототипа: `wait, confirmed, done, canceled`. `rejected`/`no_show` — легко добавить позже `CHECK`-значением; сейчас их не требует ни один экран. Не усложняю то, что нет на экранах.
 
-### 8.8. Хеш пароля: аргон2id/bcrypt, а не SHA
+### 8.8. Хеш пароля: scrypt (встроенный), а не SHA
 
-**Варианты:** (а) быстрые хеши (SHA-256); (б) медленные парольные хеши (bcrypt cost=12 / argon2id).
+**Варианты:** (а) быстрые хеши (SHA-256); (б) медленные парольные хеши (bcrypt / argon2id / scrypt).
 
-**Выбор:** (б). SHA-256 хешируется за микросекунды — перебор паролей массово осуществляется за дни. Парольные функции специально «дорогие», и каждое слово перебирается медленно. Примечание: хеш применятеся **только** в `users.password_hash`; в записи или другой таблице пароля нет.
+**Выбор:** (б) — `crypto.scrypt` из стандартной библиотеки Node (`lib/passwords.js`). SHA-256
+хешируется за микросекунды — перебор паролей массово осуществляется за дни. Парольные функции
+специально «дорогие», и каждое слово перебирается медленно. В отличие от bcrypt/argon2 здесь
+**нет native-дополнений** (не соберутся на боевом сервере): нужен только встроенный `crypto`.
+Параметры стойкости `N/r/p` и уникальная соль на пароль хранятся **в самом хеше**
+(`scrypt$16384$8$1$salt$hash`), проверка — через `timingSafeEqual`. Хеш применяется **только**
+в `users.password_hash`; в записи или другой таблице пароля нет.
 
 ### 8.9. PHPass каких reasons — `work_blocks.reason` как enum или свободный текст
 
