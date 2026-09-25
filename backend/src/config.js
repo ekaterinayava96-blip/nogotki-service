@@ -48,10 +48,14 @@ if (!Number.isInteger(port) || port < 0 || port > 65535) {
   throw new Error(`[config] PORT должен быть числом 0–65535, получено: «${portRaw}»`);
 }
 
+// Время жизни токена доступа по умолчанию (сек.)
+const AUTH_TTL_SECONDS = Number(process.env.AUTH_TTL_SECONDS || 7 * 24 * 3600);
+
 module.exports = {
   port,
   dbPath: path.resolve(__dirname, '..', process.env.DB_PATH || 'data/nogotki.db'),
   nodeEnv,
   isProduction,
   authSecret: (process.env.AUTH_SECRET || '').trim(),
+  authTtlSeconds: Number.isInteger(AUTH_TTL_SECONDS) && AUTH_TTL_SECONDS > 0 ? AUTH_TTL_SECONDS : 7 * 24 * 3600,
 };

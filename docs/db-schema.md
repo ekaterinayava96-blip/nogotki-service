@@ -304,10 +304,11 @@ CREATE TABLE studio_closures (
 | `status` | TEXT | NOT NULL, DEFAULT 'wait' | Статус, фиксированный набор |
 | `comment` | TEXT | NULL | Пожелания клиента |
 | `source` | TEXT | NOT NULL, DEFAULT 'web' | Откуда пришла запись (`web` / `telegram`) |
+| `force_override` | INTEGER | NOT NULL, DEFAULT 0 | Признак осознанного наложения (0/1) — запись создана поверх занятого времени администратором (`owner`) |
 | `created_at` | TEXT | NOT NULL | Когда создана запись |
 | `updated_at` | TEXT | NULL | Когда изменялась |
 
-**UNIQUE:** `(master_id, starts_at)`.
+**UNIQUE:** `(master_id, starts_at)` — только для активных записей **без** `force_override` (частичный индекс `idx_bookings_active_start`): обычная запись не может *начинаться* в тот же момент, что и другая активная обычная запись мастера; записи с `force_override = 1` и отменённые этот индекс не видит.
 
 **FK:** `client_id`, `service_id`, `master_id` (удаление записей при удалении услуги — `ON DELETE RESTRICT`: запись удалять нельзя, услугу — только если на неё нет записей).
 
@@ -336,20 +337,67 @@ CREATE TABLE bookings (
     CHECK (status IN ('wait','confirmed','done','canceled')),
   comment       TEXT,
   source        TEXT NOT NULL DEFAULT 'web' CHECK (source IN ('web','telegram')),
+  force_override INTEGER NOT NULL DEFAULT 0
+    CHECK (force_override IN (0, 1)),
   created_at    TEXT NOT NULL,
   updated_at    TEXT,
-  CHECK (ends_at > starts_at),
-  UNIQUE (master_id, starts_at)
+  CHECK (ends_at > starts_at)
 );
 ```
 
+**Замечание про пересечение записей (миграции 004–005):** защиту от пересечения интервалов одного мастера обеспечивают **триггеры** `trg_bookings_no_overlap_insert` / `trg_bookings_no_overlap_update` (условие `b.starts_at < NEW.ends_at AND b.ends_at > NEW.starts_at`, вплотную допустимо, отменённые не учитываются). Триггеры пропускают записи с `force_override = 1` — это легализованное администратором наложение. Запись с `force_override = 1`, однажды созданная, участвует в проверках пересечений как обычная (в подзапросе триггера она не исключается) и блокирует других кандидатов. Снять признак с записи, по факту пересекающей другую, триггер UPDATE запретит. Подробнее — §8.18.
+
 **Почему в записи нет цены:** цена услуги хранится в одном месте — `services.price_kopecks`. Запись ссылается на услугу по `service_id`, а текущая цена/выручка получается JOIN'ом (`bookings ⋈ services`). Так не бывает двух источников правды о цене. Нюанс про «цену на момент записи» — см. §8.3.
 
-**Замечание про «задвоение»:** UNIQUE `(master_id, starts_at)` не даст записать двух клиентов **в одно и то же время начала**. Но два клиента с разным началом (10:00 длится 2,5 ч и 11:00 длится 1 ч) технически пересекутся. Такой контроль «пересечения интервалов» делает прикладной код при сохранении (запрос «есть ли у мастера блоку/запись, пересекающая [T, T+длина])». Подробнее — в §8, «Спорные решения».
+**Замечание про «задвоение»:** защиту от пересечения дают триггеры (см. выше) плюс частичный UNIQUE по времени начала (страховка от одинакового старта без учёта длительности услуг). Роль `client` без `force_override` через такой контроль «пересечения интервалов» провести запись не может — единственное исключение делает администратор признаком `force_override` (см. §8.18).
 
 ---
 
-### 3.9. `clients` — клиенты
+### 3.9. `slot_holds` — удержание слота на время оформления
+
+Клиент выбрал слонпка и заполняет форму/вводит контакты — на эти минуты слот можно «удержать», чтобы его не забрал другой клиент. Удержание не создано до подтверждения записи.
+
+| Поле | Тип | Обяз. | Описание |
+|---|---|---|---|
+| `id` | INTEGER | PK, AUTOINCREMENT | Идентификатор удержания |
+| `master_id` | INTEGER | NOT NULL, FK | → masters.id: чей слот удержан |
+| `starts_at` | TEXT | NOT NULL | Начало удержанного интервала (локальное время салона) |
+| `ends_at` | TEXT | NOT NULL | Конец интервала (локальное время салона) |
+| `duration_minutes` | INTEGER | NOT NULL | Полная длительность удержанного интервала (сумма выбранных услуг) |
+| `status` | TEXT | NOT NULL, DEFAULT 'active' | `active` — действует, `used` — превратилось в запись, `canceled` — снято |
+| `token_hash` | TEXT | NOT NULL, UNIQUE | SHA-256 от одноразового токена: клиент получает токен, бэкенд хранит только хеш |
+| `created_by` | INTEGER | NOT NULL, FK | → users.id: кто удерживает (авторизованный клиент или владелец) |
+| `created_at` | TEXT | NOT NULL | Когда удержан |
+| `expires_at` | TEXT | NOT NULL | Когда удержание теряет силу (обычно +10 минут) |
+
+**UNIQUE-индекс:** `(master_id, starts_at)` только для `status='active'` — два активных удержания одного слота невозможны даже при одновременных запросах (защита от гонки).
+
+**Индексы:** `(master_id, starts_at, ends_at)` для поиска пересечений при расчёте свободного времени; `(expires_at)` — для фоновой очистки истёкших.
+
+Просроченные удержания не удаляются в момент обращения (кроме явной проверки при создании записи), а чистятся периодическим заданием раз в минуту.
+
+```sql
+CREATE TABLE slot_holds (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  master_id        INTEGER NOT NULL REFERENCES masters(id) ON DELETE CASCADE,
+  starts_at        TEXT NOT NULL,
+  ends_at          TEXT NOT NULL,
+  duration_minutes INTEGER NOT NULL CHECK (duration_minutes > 0),
+  status           TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','used','canceled')),
+  token_hash       TEXT NOT NULL UNIQUE,
+  created_by       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at       TEXT NOT NULL,
+  expires_at       TEXT NOT NULL,
+  CHECK (ends_at > starts_at)
+);
+CREATE UNIQUE INDEX idx_holds_active_slot ON slot_holds(master_id, starts_at) WHERE status = 'active';
+CREATE INDEX idx_holds_master_start ON slot_holds(master_id, starts_at, ends_at);
+CREATE INDEX idx_holds_expires ON slot_holds(expires_at);
+```
+
+---
+
+### 3.10. `clients` — клиенты
 
 Профиль клиента. В прототипе имя и телефон писались прямо в запись; в схеме они вынесены в таблицу, чтобы один клиент узнавался по телефону/Telegram между визитами («Мои записи» = все записи по его `client_id`).
 
@@ -359,9 +407,10 @@ CREATE TABLE bookings (
 | `name` | TEXT | NOT NULL | Имя |
 | `phone` | TEXT | NOT NULL | Телефон в едином нормализованном виде: `+7 (900) ...` → `+79004535000` |
 | `telegram_id` | INTEGER | NULL, UNIQUE | Telegram user id, если клиент пришёл из бота |
+| `user_id` | INTEGER | NULL, UNIQUE | FK → users.id: аккаунт входа, к которому привязан профиль клиента (для регистрации через API) |
 | `created_at` | TEXT | NOT NULL | Когда создан профиль клиента |
 
-**UNIQUE:** `phone`; `telegram_id` (если задан) — тоже уникален.
+**UNIQUE:** `phone`; `telegram_id` (если задан) — тоже уникален; `user_id` (если задан) — уникален, чтобы один аккаунт входа не соответствовал нескольким профилям.
 
 ```sql
 CREATE TABLE clients (
@@ -369,6 +418,7 @@ CREATE TABLE clients (
   name        TEXT NOT NULL,
   phone       TEXT NOT NULL,
   telegram_id INTEGER UNIQUE,
+  user_id     INTEGER UNIQUE REFERENCES users(id) ON DELETE CASCADE,
   created_at  TEXT NOT NULL,
   UNIQUE (phone)
 );
@@ -376,7 +426,7 @@ CREATE TABLE clients (
 
 ---
 
-### 3.10. `users` — учётные записи для входа в панель
+### 3.11. `users` — учётные записи для входа в панель
 
 Владелец, мастера и клиенты входят в сервис. **Хранится только хеш пароля, самого пароля в базе нет.**
 
@@ -409,7 +459,7 @@ CREATE TABLE users (
 
 ---
 
-### 3.11. `payments` — оплаты (предоплата)
+### 3.12. `payments` — оплаты (предоплата)
 
 Студия работает по модели предоплаты (полная предоплата за бронирование). Платёж проводится через ЮKassa. Таблица фиксирует статус оплаты для каждой записи.
 
@@ -521,9 +571,28 @@ CREATE TABLE clients (
   name        TEXT NOT NULL,
   phone       TEXT NOT NULL,
   telegram_id INTEGER UNIQUE,
+  user_id     INTEGER UNIQUE REFERENCES users(id) ON DELETE CASCADE,
   created_at  TEXT NOT NULL,
   UNIQUE (phone)
 );
+
+CREATE TABLE slot_holds (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  master_id        INTEGER NOT NULL REFERENCES masters(id) ON DELETE CASCADE,
+  starts_at        TEXT NOT NULL,
+  ends_at          TEXT NOT NULL,
+  duration_minutes INTEGER NOT NULL CHECK (duration_minutes > 0),
+  status           TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','used','canceled')),
+  token_hash       TEXT NOT NULL UNIQUE,
+  created_by       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at       TEXT NOT NULL,
+  expires_at       TEXT NOT NULL,
+  CHECK (ends_at > starts_at)
+);
+
+CREATE UNIQUE INDEX idx_holds_active_slot ON slot_holds(master_id, starts_at) WHERE status = 'active';
+CREATE INDEX idx_holds_master_start ON slot_holds(master_id, starts_at, ends_at);
+CREATE INDEX idx_holds_expires ON slot_holds(expires_at);
 
 CREATE TABLE bookings (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -536,11 +605,15 @@ CREATE TABLE bookings (
     CHECK (status IN ('wait','confirmed','done','canceled')),
   comment       TEXT,
   source        TEXT NOT NULL DEFAULT 'web' CHECK (source IN ('web','telegram')),
+  force_override INTEGER NOT NULL DEFAULT 0
+    CHECK (force_override IN (0, 1)),
   created_at    TEXT NOT NULL,
   updated_at    TEXT,
-  CHECK (ends_at > starts_at),
-  UNIQUE (master_id, starts_at)
+  CHECK (ends_at > starts_at)
 );
+
+CREATE UNIQUE INDEX idx_bookings_active_start ON bookings(master_id, starts_at)
+  WHERE status != 'canceled' AND force_override = 0;
 
 CREATE TABLE users (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -595,12 +668,15 @@ CREATE TABLE payments (
 | 1 | `UNIQUE (name)` | services | Две услуги не могут называться одинаково («Маникюр» × 2 — невозможно отличить) | Дубли услуг, ошибки цен и отчётов |
 | 2 | `PRIMARY KEY (master_id, service_id)` | master_services | Связь «мастер-услуга» уникальна, нельзя добавить её дважды | Вероятность задублированного поля «умеет услугу» |
 | 3 | `UNIQUE (master_id, weekday)` | master_schedule | На один день недели у мастера один график | Два графика в один день — какой «правильный»? свободные слоты начинают противоречить друг другу |
-| 4 | `UNIQUE (master_id, starts_at)` | bookings | Два клиента не могут записаться к мастеру в одно и то же время начала | Задвоение записи: два клиента в один слот, мастер не успевает |
+| 4 | `UNIQUE (master_id, starts_at)` частичный, `WHERE status != 'canceled' AND force_override = 0` | bookings | Два клиента не могут **начать** запись к мастеру в один момент. Признак `force_override = 1` (осознанное наложение администратором) из индекса исключён | Задвоение записи: два клиента в один слот, мастер не успевает |
 | 5 | `UNIQUE (phone)` | clients | Один телефон = один клиент | Дубли профиля: «Мои записи» разъезжаются между двумя карточками одного человека |
 | 6 | `UNIQUE (telegram_id)` | clients | Один telegram user = один клиент | Бот создаёт клон клиента при каждом входе |
 | 7 | `UNIQUE (username)` | users | Логины уникальны | Невозможно определить, чей аккаунт |
 | 8 | `UNIQUE (master_id)` | users | У каждого мастера не больше одного аккаунта | Два пароля на одного мастера — непонятно, какой «настоящий» |
 | 9 | `UNIQUE (telegram)` | studio_info | Контакт студии в Telegram один (если указан) | Два Telegram-адреса в строках — непонятно, какой показывать в «О студии» |
+| 10 | `UNIQUE (user_id)` | clients | Один аккаунт входа = один профиль клиента | Аккаунт может оказаться привязан к двум профилям — непонятно, от чьего имени записываться |
+| 11 | `UNIQUE (token_hash)` | slot_holds | Токен удержания одноразовый: каждому токену отвечает ровно одно удержание | Подделка/повтор токена создаёт второе удержание того же слота |
+| 12 | `UNIQUE (master_id, starts_at)` частичный, `WHERE status='active'` | slot_holds | Одновременно активное удержание одного слота — только одно (защита от гонки) | Два «активных» удержания одного слота: оба клиента думают, что слот их |
 
 ### 6.2. Индексы
 
@@ -614,6 +690,10 @@ CREATE TABLE payments (
 | 6 | `idx_payments_booking` на `(booking_id)` | payments | Найти платёж по записи при обработке вебхука ЮKassa | Каждая проверка статуса оплаты перебирает все платежи |
 | 7 | `idx_master_services_master` на `(master_id)` (другая часть PK) | master_services | Обратный запрос «все услуги мастера» (в админке — таблица мастеров) | Перебор всех строк связи |
 | 8 | `idx_closures_start` на `(starts_at, ends_at)` | studio_closures | При вычислении свободных слотов проверить, не закрыта ли студия на отрезок [start, end] | Каждая проверка «открыта ли студия» сканирует все закрытия |
+| 9 | `idx_holds_active_slot` (UNIQUE, частичный) на `(master_id, starts_at)` `WHERE status='active'` | slot_holds | Слот физически не может быть удержан дважды одновременно | Гонка: два клиента одновременно получают «свободный» слот и думают, что уже забронировали |
+| 10 | `idx_holds_master_start` на `(master_id, starts_at, ends_at)` | slot_holds | Активные удержания входят в расчёт занятых интервалов свободного времени | Свободные слоты не видят удержания — клиент бронирует уже «держанный» слот |
+| 11 | `idx_holds_expires` на `(expires_at)` | slot_holds | Фоновая чистка истёкших удержаний раз в минуту | Истёкшие удержания копятся и блокируют слоты до перезапуска |
+| 12 | `idx_bookings_active_start` (UNIQUE, частичный) на `(master_id, starts_at)` `WHERE status != 'canceled' AND force_override = 0` | bookings | Два активных обычных начала записи у одного мастера невозможны — страховка поверх триггеров пересечения (миграции 004–005) | Гонка: два одновременных запроса прочитали «слот свободен» и оба записались в один момент начала |
 
 ```sql
 -- Индексы (двухиндекс на UNIQUE не делаем — они уже индексированы сами)
@@ -625,6 +705,50 @@ CREATE INDEX idx_services_active       ON services(is_active);
 CREATE INDEX idx_payments_booking      ON payments(booking_id);
 CREATE INDEX idx_master_services_master ON master_services(master_id);
 CREATE INDEX idx_closures_start        ON studio_closures(starts_at, ends_at);
+CREATE UNIQUE INDEX idx_holds_active_slot ON slot_holds(master_id, starts_at) WHERE status = 'active';
+CREATE INDEX idx_holds_master_start    ON slot_holds(master_id, starts_at, ends_at);
+CREATE INDEX idx_holds_expires         ON slot_holds(expires_at);
+CREATE UNIQUE INDEX idx_bookings_active_start ON bookings(master_id, starts_at) WHERE status != 'canceled' AND force_override = 0;
+```
+
+**Триггеры пересечения записей (миграции 004–005):**
+
+```sql
+-- Новую/изменённую запись, пересекающую активную запись того же мастера,
+-- отклоняем (BOOKING_TIME_CONFLICT). Вплотную — допустимо. Отменённые
+-- не считаются. Записи с force_override = 1 из проверки исключены —
+-- это осознанное наложение администратором; созданная так запись дальше
+-- сама блокирует других (в подзапросе она не исключается).
+CREATE TRIGGER trg_bookings_no_overlap_insert
+BEFORE INSERT ON bookings
+FOR EACH ROW
+WHEN NEW.status != 'canceled' AND NEW.force_override = 0
+BEGIN
+  SELECT RAISE(ABORT, 'BOOKING_TIME_CONFLICT')
+  WHERE EXISTS (
+    SELECT 1 FROM bookings b
+    WHERE b.master_id = NEW.master_id
+      AND b.status != 'canceled'
+      AND b.starts_at < NEW.ends_at
+      AND b.ends_at > NEW.starts_at
+  );
+END;
+
+CREATE TRIGGER trg_bookings_no_overlap_update
+BEFORE UPDATE ON bookings
+FOR EACH ROW
+WHEN NEW.status != 'canceled' AND NEW.force_override = 0
+BEGIN
+  SELECT RAISE(ABORT, 'BOOKING_TIME_CONFLICT')
+  WHERE EXISTS (
+    SELECT 1 FROM bookings b
+    WHERE b.master_id = NEW.master_id
+      AND b.status != 'canceled'
+      AND b.id != NEW.id
+      AND b.starts_at < NEW.ends_at
+      AND b.ends_at > NEW.starts_at
+  );
+END;
 ```
 
 **Общая логика:** уникальные ограничения защищают **данные** (гарантируют, что «плохой» дубль вообще не может записаться), а индексы ускоряют **запросы**. Без уникальности появляются противоречивые данные, которые никто не починит автоматически. Без индексов данные остаются корректными, но каждый запрос «Мои записи»/«свободные слоты» превращается в полный перебор таблицы.
@@ -635,7 +759,7 @@ CREATE INDEX idx_closures_start        ON studio_closures(starts_at, ends_at);
 
 ### 7.1. Проверка: хватает ли данных для вычисления свободных интервалов
 
-Для расчёта свободных интервалов мастера на конкретный день нужны четыре блока данных. Сверка с схемой:
+Для расчёта свободных интервалов мастера на конкретный день нужны пять блоков данных. Сверка с схемой:
 
 | # | Нужны данные | Таблица → поля | В схеме |
 |---|---|---|---|
@@ -643,8 +767,9 @@ CREATE INDEX idx_closures_start        ON studio_closures(starts_at, ends_at);
 | 2 | Длительность услуги (чтобы проверить, что запись помещается в рабочий интервал) | `services.duration_minutes` | ✅ |
 | 3 | Существующие записи с временем начала и окончания (занятые интервалы) | `bookings`: `master_id`, `starts_at`, `ends_at`, `status` (отсечь `canceled`) | ✅ |
 | 4 | Блокировки времени у мастера и закрытия студии | `work_blocks` (`master_id`, `starts_at`, `ends_at`), `studio_closures` (`starts_at`, `ends_at`) | ✅ |
+| 5 | Активные удержания слотов (слот на время оформления уже занят) | `slot_holds`: `master_id`, `starts_at`, `ends_at`, `status='active'`, `expires_at` в будущем | ✅ |
 
-Все четыре блока уже есть в схеме — **дополнять таблицы не потребовалось**.
+Все пять блоков уже есть в схеме — **дополнять таблицы не потребовалось**.
 
 #### Пример: Екатерина, конкретный день
 
@@ -802,3 +927,41 @@ WHERE s.master_id = :M AND s.weekday = strftime('%w', :D)
 **Варианты:** (а) один общий enum для всех причин закрытия времени; (б) отдельный набор для блокировок мастера и отдельный для закрытия студии.
 
 **Выбор:** (б). Смысл причин разный: у мастера это «обед, перенёс, отпуск, болеет», у студии — «праздник, санитарный день». Здесь пересекается только «sick/other». Один общий enum заставил бы либо сузить список одного до другого, либо держать «мертвые» значения в чужом контексте (что приведёт к невозможности сказать «санитарный день мастера»). Раздельные CHECK-наборы точны и не дают осмысленно ввести неверную причину.
+
+### 8.15. Удержание слота — отдельная таблица `slot_holds`, не поле в `bookings`
+
+**Варианты:** (а) добавлять запись в `bookings` со статусом «удержана» сразу при выборе слота; (б) отдельная таблица `slot_holds`, а в `bookings` запись появляется только при подтверждении.
+
+**Выбор:** (б). Вариант (а) засоряет главную таблицу записей «полу-записями»: их придётся исключать из всех списков, отчётов и счётчиков «активные записи», а заброшенные удержания путали бы владельца. `slot_holds` отделена: удержание — временное состояние с фиксированным сроком жизни (`expires_at`), после истечения оно просто удаляется фоновой чисткой, никогда не показываясь как запись. Переход «удержание → запись» атомарен (в одной транзакции: пометить hold `used` + вставить `bookings`) — это исключает гонку, когда два запроса с одним токеном создают две записи.
+
+### 8.16. Токен удержания — хранить хеш, не сам токен
+
+**Варианты:** (а) хранить `token` открытым текстом; (б) хранить `token_hash` (SHA-256), выдавать токен клиенту один раз.
+
+**Выбор:** (б). Токен — это фактически ключ к слоту: если база утечёт, открытые токены позволят снимать чужие удержания. Хранится только хеш; токен возвращается клиенту в ответе `POST /holds` и больше нигде не сохраняется, при создании записи хешируется повторно для сравнения. SHA-256 достаточно, поскольку токен — 24 случайных байта (энтропия 192 бита), перебирать такой хеш бессмысленно.
+
+### 8.17. Привязка клиента к аккаунту входа — `clients.user_id`
+
+**Варианты:** (а) не связывать `clients` и `users` совсем; (б) добавить `user_id` в `clients`.
+
+**Выбор:** (б) — сделано миграцией 003. Клиент регистрируется (получает `users` с ролью `client`) и должен быть связан со своим профилем `clients`, чтобы «Мои записи» и создание записи работали от лица конкретного клиента. Поле nullable: клиенты, пришедшие из Telegram-бота без входа в панель, аккаунта не имеют. UNIQUE гарантирует «один аккаунт = один профиль».
+
+### 8.18. Осознанное наложение — записи администратора поверх занятого времени
+
+**Варианты:** (а) совсем не разрешать пересечений — только UNIQUE+триггеры; (б) признак `force_override` у записи, который выставляет только роль `owner`.
+
+**Выбор:** (б) — миграция 005. Бывают клиенты, которых администратор обязан вписать в расписание, даже если всё занято (срочный визит, важный клиент, запись по договорённости из офлайн/телефона). Для этого у `bookings` появляется `force_override` (0/1).
+
+Ключевые правила:
+
+1. **Выставить признак может только `owner`.** В `POST /bookings` значение из тела читается только при `req.user.role === 'owner'` (`bookings.js`). `client` и `master` могут передать хоть `force_override=true` в запросе — сервер просто не читает поле: признак останется `0`, запись пройдёт обычную проверку свободных слотов и пересечений. Игнорирование (а не ошибка) выбрано намеренно: клиент не получает подсказки о существовании административной возможности.
+2. **Триггер пропускает записи с признаком.** `WHEN NEW.status != 'canceled' AND NEW.force_override = 0` — пересечение других записей мастера для такой записи не проверяется ни при INSERT, ни при UPDATE.
+3. **Частичный UNIQUE-индекс тоже пропускает их.** `idx_bookings_active_start` построен с `WHERE status != 'canceled' AND force_override = 0`, чтобы запись с признаком могла совпасть даже по точному времени начала.
+4. **Созданная поверх запись дальше ведёт себя как обычная.** В подзапросах обоих триггеров её не исключают: любой другой кандидат пересекаться с ней не сможет. «Поверх» — ок, «рядом поверх» — нет.
+5. **Снять признак с пересекающей записи нельзя.** UPDATE «снимает» `force_override → 0` — теперь `WHEN` снова активен, пересечение находится, RAISE — транзакция откатывается, «легализовать» наложение задним числом нельзя.
+
+Администратор создаёт запись поверх: `POST /bookings` с `client_id` (кто записывается), `force_override: true`. Клиент и мастер этого сделать не могут — значение игнорируется.
+
+Все три роли создают запись через единую функцию `createBooking` (`POST /bookings`): `client` — на себя, `owner`/`master` — на клиента из `client_id` (+ `force_override` только у `owner`). Мастер (роль) — только в свой график: `master_id` обязан совпасть с `users.master_id` его аккаунта. Второго пути вставки в `bookings` в рантайме нет — `seed.js` тоже ходит через `createBooking`.
+
+Сценарии этих ролей, перенос и отмена покрыты автотестом `backend/tests/test_role_scenarios.py` (реальные миграции 001–005, ожидается «23 OK, 0 FAIL»); для 5xx центральный обработчик `app.js` отдаёт общий текст, без деталей БД/триггеров.

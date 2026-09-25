@@ -29,9 +29,17 @@ db.exec('PRAGMA journal_mode = WAL');
 db.exec('PRAGMA synchronous = NORMAL');
 
 // Совместимость с API better-sqlite3: db.transaction(fn) возвращает функцию,
-// которая выполняет fn внутри транзакции с COMMIT/ROLLBACK
+// которая выполняет fn внутри транзакции с COMMIT/ROLLBACK.
+//
+// BEGIN IMMEDIATE, а не BEGIN: обычный BEGIN (дефолтный BEGIN DEFERRED) не берёт
+// блокировку на запись до первой вставки/обновления. Два параллельных запроса
+// на создание записи могли бы оба прочитать «слот свободен» и только потом
+// конкурировать на записи. BEGIN IMMEDIATE снимает RESERVED-блокировку сразу:
+// второй процесс будет ждать (busy_timeout) завершения первого, затем его
+// триггер/уникальный индекс увидят уже закоммиченную конфликтующую запись и
+// отдадут ошибку вместо тихого задвоения.
 db.transaction = (fn) => (...args) => {
-  db.exec('BEGIN');
+  db.exec('BEGIN IMMEDIATE');
   try {
     const result = fn(...args);
     db.exec('COMMIT');

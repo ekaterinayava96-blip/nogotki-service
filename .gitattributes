@@ -1,0 +1,27 @@
+# Нормализация переносов строк: храним в индексе LF, рабочая копия на Windows — CRLF
+* text=auto
+
+# Текстовые файлы — хранить LF
+*.md      text eol=lf
+*.js      text eol=lf
+*.json    text eol=lf
+*.sql     text eol=lf
+*.env     text eol=lf
+*.example text eol=lf
+*.npmrc   text eol=lf
+*.gitignore text eol=lf
+*.gitattributes text eol=lf
+
+# Бинарные файлы и БД — без нормализации
+*.db      binary
+*.sqlite  binary
+*.sqlite3 binary
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.gif     binary
+*.webp    binary
+*.ico     binary
+*.pdf     binary
+*.zip     binary
+*.tgz     binary

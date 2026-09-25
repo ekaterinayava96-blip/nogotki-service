@@ -8,6 +8,7 @@ const bcrypt = require('bcryptjs');
 
 const config = require('../config');
 const db = require('./connection');
+const q = require('../repo/queries');
 
 const BCRYPT_COST = 12;
 
@@ -193,9 +194,6 @@ function insertBookings(masterIds, serviceIds) {
     console.log('Записи уже есть — пропускаю (чтобы не копить дубли при каждом запуске).');
     return;
   }
-  const ins = db.prepare(
-    'INSERT INTO bookings (client_id, service_id, master_id, starts_at, ends_at, status, comment, source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  );
   const clientByPhone = db.prepare('SELECT id FROM clients WHERE phone = ?');
 
   const day1 = nextWorkingDay(new Date());
@@ -230,17 +228,16 @@ function insertBookings(masterIds, serviceIds) {
 
     const service = SERVICES.find((x) => x.name === s.service);
     const endsAt = fmtDate(addMinutes(starts, service.dur));
-    ins.run(
-      clientByPhone.get(s.client).id,
-      serviceIds[s.service],
-      masterIds[s.master],
-      startsAt,
-      endsAt,
-      s.status,
-      s.comment,
-      s.source,
-      ts()
-    );
+    q.createBooking({
+      clientId: clientByPhone.get(s.client).id,
+      serviceId: serviceIds[s.service],
+      masterId: masterIds[s.master],
+      startsAtLocal: startsAt,
+      endsAtLocal: endsAt,
+      comment: s.comment,
+      source: s.source,
+      status: s.status,
+    });
     counts.bookings += 1;
   }
 }

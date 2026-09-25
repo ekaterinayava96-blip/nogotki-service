@@ -28,20 +28,29 @@ function run() {
     .filter((f) => f.endsWith('.sql'))
     .sort();
 
-  for (const file of files) {
-    if (applied.has(file)) {
-      console.log(`skip   ${file}`);
-      continue;
+  // Миграция 004 пересоздаёт таблицу bookings (DROP TABLE + ALTER RENAME).
+  // Чтобы это было безопасно при внешних ключах (payments -> bookings),
+  // FK временно отключаем на весь прогон — иначе DROP TABLE с referencing
+  // строками завершится ошибкой ограничения. После прогона включаем обратно.
+  db.exec('PRAGMA foreign_keys = OFF');
+  try {
+    for (const file of files) {
+      if (applied.has(file)) {
+        console.log(`skip   ${file}`);
+        continue;
+      }
+      const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8');
+      db.transaction(() => {
+        db.exec(sql);
+        db.prepare('INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)').run(
+          file,
+          new Date().toISOString()
+        );
+      })();
+      console.log(`apply  ${file}`);
     }
-    const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8');
-    db.transaction(() => {
-      db.exec(sql);
-      db.prepare('INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)').run(
-        file,
-        new Date().toISOString()
-      );
-    })();
-    console.log(`apply  ${file}`);
+  } finally {
+    db.exec('PRAGMA foreign_keys = ON');
   }
 }
 

@@ -9,6 +9,7 @@
     "node": ">=22.13"
   },
   "scripts": {
+    "start": "node src/index.js",
     "start:check": "node src/startup.js",
     "db:migrate": "node src/db/runMigrations.js",
     "db:seed": "node src/db/seed.js",
@@ -17,6 +18,7 @@
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
-    "dotenv": "^16.4.0"
+    "dotenv": "^16.4.0",
+    "express": "^4.21.2"
   }
 }
