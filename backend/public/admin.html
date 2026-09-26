@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Админ — тестовый фронтенд</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header>
+    <nav>
+      <a href="index.html">Вход/регистрация</a>
+      <a href="services.html">Услуги и мастера</a>
+      <a href="slots.html">Свободное время</a>
+      <a href="booking.html">Записаться</a>
+      <a href="cabinet.html">Мои записи</a>
+      <a href="admin.html">Админ</a>
+    </nav>
+    <span id="who"></span>
+    <button id="logout" hidden>Выйти</button>
+  </header>
+  <main>
+    <h1>Административная страница (роль owner)</h1>
+    <div id="error" hidden></div>
+    <div id="ok" hidden></div>
+    <div id="denied" class="card" hidden>
+      <p>Доступ только для роли <b>owner</b>. Войдите под администратором (seed: admin / admin12345).</p>
+    </div>
+
+    <div id="panel" hidden>
+      <div class="card">
+        <nav>
+          <button type="button" class="tab-button primary" data-tab="stats">Статистика</button>
+          <button type="button" class="tab-button" data-tab="bookings">Записи</button>
+          <button type="button" class="tab-button" data-tab="services">Услуги</button>
+          <button type="button" class="tab-button" data-tab="masters">Мастера</button>
+        </nav>
+      </div>
+
+      <!-- Статистика -->
+      <section id="tab-stats" class="card">
+        <h2>Статистика</h2>
+        <div id="stats"></div>
+      </section>
+
+      <!-- Записи -->
+      <section id="tab-bookings" class="card" hidden>
+        <h2>Все записи</h2>
+        <label for="bstatus">Фильтр по статусу</label>
+        <select id="bstatus">
+          <option value="">Все</option>
+          <option value="wait">Ожидает</option>
+          <option value="confirmed">Подтверждена</option>
+          <option value="done">Выполнена</option>
+          <option value="canceled">Отменена</option>
+        </select>
+        <div id="bookings"></div>
+      </section>
+
+      <!-- Услуги -->
+      <section id="tab-services" class="card" hidden>
+        <h2>Услуги</h2>
+        <fieldset>
+          <legend id="sform-legend">Создать услугу</legend>
+          <input type="hidden" id="sid">
+          <label for="s-name">Название</label>
+          <input id="s-name">
+          <label for="s-desc">Описание</label>
+          <textarea id="s-desc"></textarea>
+          <label for="s-price">Цена, ₽</label>
+          <input id="s-price" type="number" min="0" step="0.01">
+          <label for="s-duration">Длительность, мин</label>
+          <input id="s-duration" type="number" min="1">
+          <label class="inline"><input type="checkbox" id="s-active" checked> Активна</label>
+          <br><button type="button" class="primary" id="s-save">Сохранить услугу</button>
+          <button type="button" id="s-reset" hidden>Отменить редактирование</button>
+        </fieldset>
+        <div id="services"></div>
+      </section>
+
+      <!-- Мастера -->
+      <section id="tab-masters" class="card" hidden>
+        <h2>Мастера</h2>
+        <fieldset>
+          <legend id="mform-legend">Создать мастера</legend>
+          <input type="hidden" id="mid">
+          <label for="m-name">Имя</label>
+          <input id="m-name">
+          <label for="m-role">Специализация</label>
+          <input id="m-role" placeholder="Мастер маникюра">
+          <label for="m-exp">Опыт, лет</label>
+          <input id="m-exp" type="number" min="0">
+          <label class="inline"><input type="checkbox" id="m-active" checked> Активен</label>
+          <label>Услуги мастера</label>
+          <div id="m-services-box"></div>
+          <button type="button" class="primary" id="m-save">Сохранить мастера</button>
+          <button type="button" id="m-reset" hidden>Отменить редактирование</button>
+        </fieldset>
+        <div id="masters"></div>
+      </section>
+    </div>
+  </main>
+
+  <script src="js/api.js"></script>
+  <script>
+    (function () {
+      if (!window.requireAuth()) return;
+      var logoutBtn = document.getElementById('logout');
+      var who = document.getElementById('who');
+      var u = window.api.user();
+      if (u) { who.textContent = ' · ' + u.username + ' [' + (u.roles || []).join(', ') + ']'; logoutBtn.hidden = false; }
+      logoutBtn.addEventListener('click', function () { window.api.logout(); });
+
+      if (!api.hasRole('owner')) {
+        document.getElementById('denied').hidden = false;
+        return;
+      }
+      document.getElementById('panel').hidden = false;
+
+      var allServices = [];
+      var allMasters = [];
+
+      // ---------- Вкладки ----------
+      document.querySelectorAll('.tab-button').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          document.querySelectorAll('.tab-button').forEach(function (b) { b.classList.remove('primary'); });
+          btn.classList.add('primary');
+          ['stats', 'bookings', 'services', 'masters'].forEach(function (t) {
+            document.getElementById('tab-' + t).hidden = (t !== btn.dataset.tab);
+          });
+          if (btn.dataset.tab === 'bookings') loadBookings();
+          if (btn.dataset.tab === 'services') loadServices();
+          if (btn.dataset.tab === 'masters') loadMasters();
+        });
+      });
+
+      loadStats();
+
+      // ---------- Статистика ----------
+      function loadStats() {
+        api.request('/api/admin/stats').then(function (r) {
+          document.getElementById('stats').innerHTML =
+            '<table><tr><th>Всего записей</th><td>' + r.total_bookings + '</td></tr>' +
+            '<tr><th>Активные записи</th><td>' + r.active_bookings + '</td></tr>' +
+            '<tr><th>Сумма активных, ₽</th><td>' + api.rub(r.active_sum_kopecks) + '</td></tr>' +
+            '<tr><th>Мастеров</th><td>' + r.masters_count + '</td></tr></table>';
+        }).catch(function () {});
+      }
+
+      // ---------- Записи ----------
+      function loadBookings() {
+        var status = document.getElementById('bstatus').value;
+        var url = '/api/admin/bookings' + (status ? '?status=' + encodeURIComponent(status) : '');
+        api.request(url).then(function (r) {
+          var box = document.getElementById('bookings');
+          if (!r.bookings.length) { box.innerHTML = '<p class="muted">Записей нет.</p>'; return; }
+          var html = '<table><tr><th>#</th><th>Клиент</th><th>Услуга</th><th>Мастер</th><th>Время</th>' +
+            '<th>Статус</th><th>Цена</th><th></th></tr>';
+          r.bookings.forEach(function (b) {
+            html += '<tr data-id="' + b.id + '">' +
+              '<td>' + b.id + '</td>' +
+              '<td>' + api.esc(b.client.name) + '<div class="muted">' + api.esc(b.client.phone) + '</div></td>' +
+              '<td>' + api.esc(b.service.name) + '</td>' +
+              '<td>' + api.esc(b.master.name) + '</td>' +
+              '<td>' + api.fmt(b.starts_at) + '</td>' +
+              '<td><span class="badge ' + b.status + '">' + (window.BOOKING_STATUS[b.status] || b.status) + '</span></td>' +
+              '<td>' + api.rub(b.service.price_kopecks) + '</td>' +
+              '<td><select class="b-status-sel">' +
+              ['wait', 'confirmed', 'done', 'canceled'].map(function (s) {
+                return '<option value="' + s + '"' + (s === b.status ? ' selected' : '') + '>' +
+                  (window.BOOKING_STATUS[s] || s) + '</option>';
+              }).join('') +
+              '</select> <button type="button" class="b-status-save">Сохранить</button></td>' +
+              '</tr>';
+          });
+          html += '</table>';
+          box.innerHTML = html;
+          box.querySelectorAll('.b-status-save').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+              var row = btn.closest('tr');
+              var id = row.dataset.id;
+              var status = row.querySelector('.b-status-sel').value;
+              window.ui.clear();
+              api.request('/api/admin/bookings/' + id, { method: 'PATCH', json: { status: status } })
+                .then(function () { window.ui.ok('Статус записи #' + id + ' обновлён.'); loadBookings(); })
+                .catch(function () {});
+            });
+          });
+        }).catch(function () {});
+      }
+      document.getElementById('bstatus').addEventListener('change', loadBookings);
+
+      // ---------- Услуги ----------
+      function loadServices() {
+        api.request('/api/admin/services').then(function (r) {
+          allServices = r.services;
+          renderServices();
+        }).catch(function () {});
+      }
+
+      function renderServices() {
+        var box = document.getElementById('services');
+        if (!allServices.length) { box.innerHTML = '<p class="muted">Услуг пока нет.</p>'; return; }
+        var html = '<table><tr><th>Название</th><th>Цена</th><th>Мин</th><th>Активна</th><th></th></tr>';
+        allServices.forEach(function (s) {
+          html += '<tr data-id="' + s.id + '">' +
+            '<td>' + api.esc(s.name) + '<div class="muted">' + api.esc(s.description || '') + '</div></td>' +
+            '<td>' + api.rub(s.price_kopecks) + '</td>' +
+            '<td>' + s.duration_minutes + '</td>' +
+            '<td>' + (s.is_active ? 'Да' : 'Нет') + '</td>' +
+            '<td><button type="button" class="s-edit">Изменить</button> ' +
+            '<button type="button" class="s-del">Удалить</button></td></tr>';
+        });
+        html += '</table>';
+        box.innerHTML = html;
+
+        box.querySelectorAll('.s-edit').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            var id = Number(btn.closest('tr').dataset.id);
+            var s = allServices.find(function (x) { return x.id === id; });
+            document.getElementById('sform-legend').textContent = 'Изменить услугу #' + s.id;
+            document.getElementById('sid').value = s.id;
+            document.getElementById('s-name').value = s.name;
+            document.getElementById('s-desc').value = s.description || '';
+            document.getElementById('s-price').value = (s.price_kopecks / 100);
+            document.getElementById('s-duration').value = s.duration_minutes;
+            document.getElementById('s-active').checked = !!s.is_active;
+            document.getElementById('s-reset').hidden = false;
+            window.scrollTo(0, 0);
+          });
+        });
+        box.querySelectorAll('.s-del').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            var id = Number(btn.closest('tr').dataset.id);
+            if (!confirm('Удалить услугу #' + id + '?')) return;
+            window.ui.clear();
+            api.request('/api/admin/services/' + id, { method: 'DELETE' })
+              .then(function () { window.ui.ok('Услуга #' + id + ' удалена.'); loadServices(); })
+              .catch(function () {});
+          });
+        });
+      }
+
+      function serviceFormData() {
+        return {
+          name: document.getElementById('s-name').value.trim(),
+          description: document.getElementById('s-desc').value.trim(),
+          price_kopecks: Math.round(Number(document.getElementById('s-price').value) * 100),
+          duration_minutes: Number(document.getElementById('s-duration').value),
+          is_active: document.getElementById('s-active').checked ? 1 : 0
+        };
+      }
+
+      document.getElementById('s-save').addEventListener('click', function () {
+        window.ui.clear();
+        var id = document.getElementById('sid').value;
+        var body = serviceFormData();
+        var req = id
+          ? api.request('/api/admin/services/' + id, { method: 'PATCH', json: body })
+          : api.request('/api/admin/services', { method: 'POST', json: body });
+        req.then(function () {
+          window.ui.ok(id ? ('Услуга #' + id + ' обновлена.') : 'Услуга создана.');
+          resetServiceForm();
+          loadServices();
+        }).catch(function () {});
+      });
+
+      function resetServiceForm() {
+        document.getElementById('sid').value = '';
+        document.getElementById('sform-legend').textContent = 'Создать услугу';
+        document.getElementById('s-name').value = '';
+        document.getElementById('s-desc').value = '';
+        document.getElementById('s-price').value = '';
+        document.getElementById('s-duration').value = '';
+        document.getElementById('s-active').checked = true;
+        document.getElementById('s-reset').hidden = true;
+      }
+      document.getElementById('s-reset').addEventListener('click', function () { resetServiceForm(); });
+
+      // ---------- Мастера ----------
+      function loadMasters() {
+        Promise.all([api.request('/api/admin/masters'), api.request('/api/admin/services')]).then(function (rs) {
+          allMasters = rs[0].masters;
+          renderMasterServiceBox(rs[1].services);
+        }).catch(function () {});
+      }
+
+      function renderMasterServiceBox(services) {
+        allServices = services;
+        var box = document.getElementById('m-services-box');
+        if (!services.length) { box.innerHTML = '<p class="muted">Сначала создайте услуги.</p>'; return; }
+        box.innerHTML = services.map(function (s) {
+          return '<label class="inline"><input type="checkbox" class="m-service-cb" value="' + s.id + '"> ' +
+            api.esc(s.name) + '</label>';
+        }).join('');
+        renderMasters();
+      }
+
+      function renderMasters() {
+        var box = document.getElementById('masters');
+        if (!allMasters.length) { box.innerHTML = '<p class="muted">Мастеров пока нет.</p>'; return; }
+        var html = '<table><tr><th>Имя</th><th>Специализация</th><th>Опыт</th><th>Активен</th><th>Услуги</th><th></th></tr>';
+        allMasters.forEach(function (m) {
+          html += '<tr data-id="' + m.id + '">' +
+            '<td>' + api.esc(m.name) + '</td>' +
+            '<td>' + api.esc(m.role) + '</td>' +
+            '<td>' + m.experience_years + '</td>' +
+            '<td>' + (m.is_active ? 'Да' : 'Нет') + '</td>' +
+            '<td>' + m.services.map(function (s) { return api.esc(s.name); }).join(', ') + '</td>' +
+            '<td><button type="button" class="m-edit">Изменить</button> ' +
+            '<button type="button" class="m-del">Удалить</button></td></tr>';
+        });
+        html += '</table>';
+        box.innerHTML = html;
+        bindMasterActions();
+      }
+
+      function bindMasterActions() {
+        document.querySelectorAll('.m-edit').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            var id = Number(btn.closest('tr').dataset.id);
+            var m = allMasters.find(function (x) { return x.id === id; });
+            document.getElementById('mform-legend').textContent = 'Изменить мастера #' + m.id;
+            document.getElementById('mid').value = m.id;
+            document.getElementById('m-name').value = m.name;
+            document.getElementById('m-role').value = m.role || '';
+            document.getElementById('m-exp').value = m.experience_years || 0;
+            document.getElementById('m-active').checked = !!m.is_active;
+            var ids = m.services.map(function (s) { return String(s.id); });
+            document.querySelectorAll('.m-service-cb').forEach(function (cb) {
+              cb.checked = ids.indexOf(String(cb.value)) !== -1;
+            });
+            document.getElementById('m-reset').hidden = false;
+            window.scrollTo(0, 0);
+          });
+        });
+        document.querySelectorAll('.m-del').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            var id = Number(btn.closest('tr').dataset.id);
+            if (!confirm('Удалить мастера #' + id + '?')) return;
+            window.ui.clear();
+            api.request('/api/admin/masters/' + id, { method: 'DELETE' })
+              .then(function () { window.ui.ok('Мастер #' + id + ' удалён.'); loadMasters(); })
+              .catch(function () {});
+          });
+        });
+      }
+
+      function masterFormData() {
+        var serviceIds = [];
+        document.querySelectorAll('.m-service-cb:checked').forEach(function (cb) { serviceIds.push(Number(cb.value)); });
+        return {
+          name: document.getElementById('m-name').value.trim(),
+          role: document.getElementById('m-role').value.trim(),
+          experience_years: Number(document.getElementById('m-exp').value || 0),
+          is_active: document.getElementById('m-active').checked ? 1 : 0,
+          service_ids: serviceIds
+        };
+      }
+
+      document.getElementById('m-save').addEventListener('click', function () {
+        window.ui.clear();
+        var id = document.getElementById('mid').value;
+        var body = masterFormData();
+        var req = id
+          ? api.request('/api/admin/masters/' + id, { method: 'PATCH', json: body })
+          : api.request('/api/admin/masters', { method: 'POST', json: body });
+        req.then(function () {
+          window.ui.ok(id ? ('Мастер #' + id + ' обновлён.') : 'Мастер создан.');
+          resetMasterForm();
+          loadMasters();
+        }).catch(function () {});
+      });
+
+      function resetMasterForm() {
+        document.getElementById('mid').value = '';
+        document.getElementById('mform-legend').textContent = 'Создать мастера';
+        document.getElementById('m-name').value = '';
+        document.getElementById('m-role').value = '';
+        document.getElementById('m-exp').value = '';
+        document.getElementById('m-active').checked = true;
+        document.querySelectorAll('.m-service-cb').forEach(function (cb) { cb.checked = false; });
+        document.getElementById('m-reset').hidden = true;
+      }
+      document.getElementById('m-reset').addEventListener('click', function () { resetMasterForm(); });
+    })();
+  </script>
+</body>
+</html>

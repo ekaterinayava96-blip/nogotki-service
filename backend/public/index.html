@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Регистрация и вход — тестовый фронтенд</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header>
+    <nav>
+      <a href="index.html">Вход/регистрация</a>
+      <a href="services.html">Услуги и мастера</a>
+      <a href="slots.html">Свободное время</a>
+      <a href="booking.html">Записаться</a>
+      <a href="cabinet.html">Мои записи</a>
+      <a href="admin.html">Админ</a>
+    </nav>
+    <span id="who"></span>
+    <button id="logout" hidden>Выйти</button>
+  </header>
+  <main>
+    <h1>Студия «Ноготочки» — тестовый фронтенд</h1>
+    <div id="error" hidden></div>
+    <div id="ok" hidden></div>
+
+    <!-- Состояние: уже вошли -->
+    <div id="authed" class="card" hidden>
+      <h2>Вы вошли</h2>
+      <p id="authed-info"></p>
+      <p class="muted">Открытая регистрация создаёт роль <b>client</b>. Роли <b>owner</b> и <b>master</b>
+        выдаёт администратор в БД; для проверки можно войти seed-учёткой
+        (admin / admin12345, master / master12345).</p>
+    </div>
+
+    <!-- Состояние: гость -->
+    <div id="guest">
+      <div class="card" style="max-width:420px">
+        <h2>Вход</h2>
+        <form id="login-form">
+          <label for="login-username">Логин</label>
+          <input id="login-username" name="username" required>
+          <label for="login-password">Пароль</label>
+          <input id="login-password" name="password" type="password" required>
+          <button type="submit" class="primary">Войти</button>
+        </form>
+      </div>
+
+      <div class="card" style="max-width:420px">
+        <h2>Регистрация клиента</h2>
+        <form id="register-form">
+          <label for="reg-username">Логин (латиница, цифры, _ и . — 3–32)</label>
+          <input id="reg-username" name="username" autocomplete="username" required>
+          <label for="reg-password">Пароль (минимум 8 символов)</label>
+          <input id="reg-password" name="password" type="password" required>
+          <label for="reg-name">Имя</label>
+          <input id="reg-name" name="name" required>
+          <label for="reg-phone">Телефон (10–15 цифр, можно «+»)</label>
+          <input id="reg-phone" name="phone" placeholder="+7 900 000-00-00" required>
+          <button type="submit" class="primary">Зарегистрироваться</button>
+        </form>
+      </div>
+    </div>
+  </main>
+
+  <script src="js/api.js"></script>
+  <script>
+    (function () {
+      document.getElementById('logout').addEventListener('click', function () { window.api.logout(); });
+      renderAuthState();
+
+      function renderAuthState() {
+        if (window.api.isAuthed()) {
+          var u = window.api.user();
+          document.getElementById('authed').hidden = false;
+          document.getElementById('authed-info').textContent =
+            'Пользователь: ' + (u ? u.username : '?') + ', роли: [' + (u ? u.roles.join(', ') : '') + ']';
+          document.getElementById('guest').hidden = true;
+          var logoutBtn = document.getElementById('logout');
+          if (logoutBtn) logoutBtn.hidden = false;
+        } else {
+          document.getElementById('guest').hidden = false;
+        }
+      }
+
+      function afterAuth(token, u) {
+        window.api.saveAuth(token, u);
+        window.ui.ok('Вход выполнен — токен сохранён.');
+        renderAuthState();
+      }
+
+      document.getElementById('login-form').addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        window.ui.clear();
+        var body = {
+          username: document.getElementById('login-username').value.trim(),
+          password: document.getElementById('login-password').value
+        };
+        window.api.request('/api/auth/login', { method: 'POST', json: body })
+          .then(function (r) { afterAuth(r.token, r.user); })
+          .catch(function () {});
+      });
+
+      document.getElementById('register-form').addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        window.ui.clear();
+        var body = {
+          username: document.getElementById('reg-username').value.trim(),
+          password: document.getElementById('reg-password').value,
+          name: document.getElementById('reg-name').value.trim(),
+          phone: document.getElementById('reg-phone').value.trim()
+        };
+        window.api.request('/api/auth/register', { method: 'POST', json: body })
+          .then(function (r) { afterAuth(r.token, r.user); })
+          .catch(function () {});
+      });
+    })();
+  </script>
+</body>
+</html>

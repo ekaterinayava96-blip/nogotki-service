@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Мои записи — тестовый фронтенд</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header>
+    <nav>
+      <a href="index.html">Вход/регистрация</a>
+      <a href="services.html">Услуги и мастера</a>
+      <a href="slots.html">Свободное время</a>
+      <a href="booking.html">Записаться</a>
+      <a href="cabinet.html">Мои записи</a>
+      <a href="admin.html">Админ</a>
+    </nav>
+    <span id="who"></span>
+    <button id="logout" hidden>Выйти</button>
+  </header>
+  <main>
+    <h1>Личный кабинет: записи</h1>
+    <div id="error" hidden></div>
+    <div id="ok" hidden></div>
+    <p id="hint" class="muted"></p>
+    <div id="list"></div>
+  </main>
+
+  <script src="js/api.js"></script>
+  <script>
+    (function () {
+      if (!window.requireAuth()) return;
+      var logoutBtn = document.getElementById('logout');
+      var who = document.getElementById('who');
+      var u = window.api.user();
+      if (u) { who.textContent = ' · ' + u.username + ' [' + (u.roles || []).join(', ') + ']'; logoutBtn.hidden = false; }
+      logoutBtn.addEventListener('click', function () { window.api.logout(); });
+
+      function load() {
+        window.ui.clear();
+        api.request('/api/bookings').then(function (r) {
+          render(r.bookings);
+        }).catch(function () {});
+      }
+
+      function render(bookings) {
+        var box = document.getElementById('list');
+        var roles = (window.api.user() || {}).roles || [];
+        var hint = [];
+        if (roles.indexOf('client') !== -1) hint.push('Клиент видит свои записи.');
+        if (roles.indexOf('master') !== -1) hint.push('Мастер видит записи своего графика.');
+        if (roles.indexOf('owner') !== -1) hint.push('Владелец видит все записи — фильтры и статусы на странице «Админ».');
+        document.getElementById('hint').textContent = hint.join(' ');
+
+        if (!bookings.length) {
+          box.innerHTML = '<p class="muted">Записей нет. <a href="slots.html">Записаться</a></p>';
+          return;
+        }
+        var html = '';
+        bookings.forEach(function (b) {
+          html += fieldsetFor(b, roles);
+        });
+        box.innerHTML = html;
+        bindActions();
+      }
+
+      function fieldsetFor(b, roles) {
+        var active = b.status === 'wait' || b.status === 'confirmed';
+        var canEdit = roles.indexOf('owner') !== -1 || active;
+        var actions = '';
+        if (canEdit) {
+          actions += '<button type="button" class="row-cancel" data-id="' + b.id + '">Отменить</button>' +
+            '<button type="button" class="row-move" data-id="' + b.id + '">Перенести</button>';
+        }
+        var clientLine = (roles.indexOf('owner') !== -1 || roles.indexOf('master') !== -1)
+          ? '<div class="muted">Клиент: ' + api.esc(b.client.name) + ' · ' + api.esc(b.client.phone) + '</div>' : '';
+        return '<fieldset class="booking" data-id="' + b.id + '">' +
+          '<legend>Запись #' + b.id + ' · <span class="badge ' + b.status + '">' +
+          (window.BOOKING_STATUS[b.status] || b.status) + '</span></legend>' +
+          '<div><b>' + api.fmt(b.starts_at) + ' – ' + api.hour(b.ends_at) + '</b></div>' +
+          '<div>' + api.esc(b.master.name) + ' · ' + api.esc(b.service.name) + ' · ' + api.rub(b.service.price_kopecks) + '</div>' +
+          clientLine +
+          (b.comment ? '<div class="muted">Комментарий: ' + api.esc(b.comment) + '</div>' : '') +
+          '<div class="row-actions">' + actions + '</div>' +
+          '<div class="move-form" hidden><label>Новое время (салон UTC+3)</label>' +
+          '<input type="datetime-local"> <button type="button" class="move-save">Сохранить</button>' +
+          '<button type="button" class="move-cancel">Отмена</button></div>' +
+          '</fieldset>';
+      }
+
+      function bindActions() {
+        document.querySelectorAll('.row-cancel').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            var id = btn.dataset.id;
+            if (!confirm('Отменить запись #' + id + '?')) return;
+            window.ui.clear();
+            api.request('/api/bookings/' + id + '/cancel', { method: 'POST' }).then(function () {
+              window.ui.ok('Запись #' + id + ' отменена.');
+              load();
+            }).catch(function () {});
+          });
+        });
+
+        document.querySelectorAll('.row-move').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            var fs = btn.closest('fieldset');
+            var form = fs.querySelector('.move-form');
+            var inp = form.querySelector('input');
+            var timeText = fs.querySelector('b').textContent;
+            var day = timeText.split(' ')[0].split('.'); // ДД.ММ.ГГГГ
+            var hm = timeText.match(/(\d{2}):(\d{2})/);
+            var iso = new Date(Date.UTC(Number(day[2]), Number(day[1]) - 1, Number(day[0]), Number(hm[1]), Number(hm[2])) - 180 * 60000);
+            inp.value = api.isoToInput(iso.toISOString());
+            form.hidden = !form.hidden;
+          });
+        });
+
+        document.querySelectorAll('.move-save').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            var fs = btn.closest('fieldset');
+            var id = fs.dataset.id;
+            var inp = fs.querySelector('.move-form input');
+            var startIso = api.inputToIso(inp.value);
+            if (!startIso) { window.ui.error('Укажите новое время.'); return; }
+            window.ui.clear();
+            api.request('/api/bookings/' + id, { method: 'PATCH', json: { starts_at: startIso } }).then(function () {
+              window.ui.ok('Запись #' + id + ' перенесена.');
+              load();
+            }).catch(function () {});
+          });
+        });
+
+        document.querySelectorAll('.move-cancel').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            btn.closest('.move-form').hidden = true;
+          });
+        });
+      }
+
+      load();
+    })();
+  </script>
+</body>
+</html>

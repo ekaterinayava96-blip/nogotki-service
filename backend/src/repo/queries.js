@@ -4,7 +4,7 @@
 // выражения node:sqlite. Здесь же — сериализация ответов (без паролей и
 // чужих персональных данных, сумма в копейках, время наружу в UTC).
 
-const db = require('./connection');
+const db = require('../db/connection');
 const { toDbLocal, nowDbLocal, dbLocalToUtcIso } = require('../lib/time');
 
 function getOr404(table, id, columns = '*') {

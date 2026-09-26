@@ -171,3 +171,5 @@ credentials/
 *.sqlite3
 *.db
 *.db-journal
+*.db-wal
+*.db-shm

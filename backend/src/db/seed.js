@@ -116,6 +116,7 @@ const counts = {
   master_schedule: 0,
   users: 0,
   clients: 0,
+  clients_linked: 0,
   bookings: 0,
 };
 
@@ -207,6 +208,17 @@ function insertClients() {
     ins.run(c.name, c.phone, c.tg, ts());
     counts.clients += 1;
   }
+}
+
+// Связываем клиентскую учётку 'client' с профилем из CLIENTS, чтобы демо-логин
+// мог записываться и видеть «свои записи» (clients.user_id — как при
+// регистрации нового пользователя).
+function linkClientUser() {
+  const user = db.prepare('SELECT id FROM users WHERE username = ?').get('client');
+  const client = db.prepare('SELECT id, user_id FROM clients WHERE phone = ?').get(CLIENTS[0].phone);
+  if (!user || !client || client.user_id) return;
+  db.prepare('UPDATE clients SET user_id = ? WHERE id = ?').run(Number(user.id), Number(client.id));
+  counts.clients_linked += 1;
 }
 
 // 5. Две-три записи на ближайшие рабочие дни, чтобы календарь не был пустым.
@@ -322,7 +334,7 @@ function summary() {
   console.log('\nСоздано за этот запуск:', JSON.stringify(counts));
 }
 
-module.exports = function seed() {
+function seed() {
   if (config.nodeEnv === 'production') {
     throw new Error('[db:seed] Запрещено при NODE_ENV=production: тестовые данные не должны попадать в боевую базу.');
   }
@@ -333,12 +345,15 @@ module.exports = function seed() {
     const masterIds = insertMasters(serviceIds);
     insertUsers(masterIds);
     insertClients();
+    linkClientUser();
     insertBookings(masterIds, serviceIds);
   })();
 
   console.log('Сид применён.');
   summary();
-};
+}
+
+module.exports = seed;
 
 if (require.main === module) {
   seed();

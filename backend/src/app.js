@@ -3,6 +3,7 @@
 // Сборка Express-приложения: JSON-парсер, маршруты, 404 и обработчик ошибок.
 
 const express = require('express');
+const path = require('path');
 
 const config = require('./config');
 const authRoutes = require('./routes/auth');
@@ -35,9 +36,13 @@ app.get('/health', (req, res) => res.json({ status: 'ok' }));
 app.use('/api/auth', authRoutes);
 app.use('/api', catalogRoutes);
 app.use('/api', holdsRoutes);
-app.use('/api', bookingRoutes);
-app.use('/api', feedbackRoutes);
+app.use('/api/bookings', bookingRoutes);
+app.use('/api/feedback', feedbackRoutes);
 app.use('/api/admin', adminRoutes);
+
+// Черновой тестовый фронтенд: статика из backend/public. Сервится тем же
+// сервером, что и API (один origin — CORS не нужен), файл / -> index.html.
+app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // 404
 app.use((req, res) => {
