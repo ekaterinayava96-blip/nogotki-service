@@ -1,0 +1,70 @@
+/* ============================================================
+   ТОКЕНЫ «НОГОТОЧКИ» v0.1
+   Источник: дизайн-система прототипа — prototype/style.css,
+   блок «1. ДИЗАЙН-ТОКЕНЫ», :root (строки 8–69).
+   Имена семантические (по назначению), значения — только из дизайн-системы.
+   ============================================================ */
+
+:root {
+  /* ---------- ЦВЕТА ---------- */
+
+  /* Текст */
+  --color-text-primary: #3d3036;   /* основной текст: --neutral-800 (цвет body) */
+  --color-text-heading: #2a1e24;   /* заголовки h1–h3: --plum-900 */
+  --color-text-muted:   #8a7a80;   /* приглушённый текст: --neutral-500 */
+
+  /* Фон */
+  --color-bg-page:    #fffaf7;     /* фон страницы: --warm-white */
+  --color-bg-surface: #ffffff;     /* фон карточек/панелей: #fff (.card-service, .panel, .calendar) */
+  --color-bg-subtle:  #f9ecef;     /* фон секций: --rose-100 */
+
+  /* Граница */
+  --color-border:        #f3d9de;  /* рамки элементов: --rose-200 */
+  --color-border-strong: #e6bdc6;  /* границы полей форм: --rose-300 */
+
+  /* Кнопка */
+  --color-button-primary:         #b84a62;  /* акцент / CTA: --berry-500 */
+  --color-button-primary-hover:   #a03c53;  /* hover: --berry-600 */
+  --color-button-primary-pressed: #87304a;  /* pressed: --berry-700 */
+  --color-button-primary-text:    #ffffff;  /* цвет текста кнопки: #fff (.btn--primary) */
+  --color-button-secondary-bg:    #f9ecef;  /* фон secondary: --rose-100 */
+  --color-button-secondary-text:  #87304a;  /* текст secondary: --berry-700 */
+  --color-button-secondary-hover: #f3d9de;  /* hover secondary: --rose-200 (.btn--secondary:hover) */
+
+  /* Статусные: успех / ошибка / предупреждение */
+  --color-success:      #2e8b57;   /* успех: --status-free */
+  --color-success-bg:   #e4f4ea;   /* фон успеха: --status-free-bg */
+  --color-error:        #d64545;   /* ошибка: --status-busy */
+  --color-error-bg:     #fbe9e9;   /* фон ошибки: --status-busy-bg */
+  --color-warning:      #d9930a;   /* предупреждение: --status-wait */
+  --color-warning-bg:   #fdf3de;   /* фон предупреждения: --status-wait-bg */
+
+  /* ---------- ШРИФТ ---------- */
+  --font-family-heading: "Playfair Display", Georgia, serif;
+  --font-family-body:    "Nunito", "Segoe UI", system-ui, sans-serif;
+
+  /* ---------- РАЗМЕРЫ ТЕКСТА ---------- */
+  --font-size-h1:      clamp(2.2rem, 6vw, 3.75rem);  /* --text-h1 */
+  --font-size-h2:      clamp(1.75rem, 4vw, 2.5rem);  /* --text-h2 */
+  --font-size-h3:      1.5rem;                        /* --text-h3 */
+  --font-size-body:    1rem;                          /* --text-body */
+  --font-size-sm:      0.875rem;                      /* --text-sm */
+  --font-size-caption: 0.8125rem;                     /* --text-caption */
+
+  /* ---------- ОТСТУПЫ ---------- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  /* ---------- СКРУГЛЕНИЯ ---------- */
+  --radius-sm:   8px;
+  --radius-md:   14px;
+  --radius-lg:   22px;
+  --radius-xl:   28px;
+  --radius-full: 999px;
+}
