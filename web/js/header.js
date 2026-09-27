@@ -1,32 +1,53 @@
 'use strict';
 
-// Общая шапка кабинета. Вставляется на все страницы кабинета через
-// <div id="global-header"></div> + <script src="js/header.js"></script>.
-// Требует авторизации: без токена редиректит на вход.
+// ЕДИНАЯ ШАПКА КЛИЕНТА. Подключается на ВСЕ страницы web/ через
+//   <div id="global-header"></div>
+//   <script src="js/api.js"></script>
+//   <script src="js/header.js"></script>
+// Состав — из прототипа (prototype/index.html) и глобальной навигации
+// карты связей: бренд, «Услуги и цены», «О студии», «Мои записи»,
+// CTA «Записаться» + блок авторизации.
+// Имя вошедшего клиента берётся из API (GET /api/auth/me, кука-сессия);
+// если клиент не вошёл — вместо аватара показываем «Войти» и «Регистрация».
+// Шапка прижата к верху страницы (position: sticky в app.css -> .nav).
 
 (function () {
-  function mount() {
-    var host = document.getElementById('global-header');
-    if (!host) return;
+  var host = document.getElementById('global-header');
+  if (!host) return;
 
-    if (!window.api.isAuthed()) {
-      window.location.href = 'login.html';
-      return;
+  function render(user) {
+    var links =
+      '<a href="index.html#services">Услуги и цены</a>' +
+      '<a href="index.html#about">О студии</a>' +
+      '<a href="appointments.html">Мои записи</a>';
+
+    var auth;
+    if (user) {
+      var name = user.client_name || user.username || '?';
+      var initial = window.api.esc(String(name).trim().charAt(0).toUpperCase());
+      auth =
+        '<div class="nav__auth">' +
+          '<span class="nav__avatar" title="' + window.api.esc(name) + '">' + initial + '</span>' +
+          '<span class="nav__user">' + window.api.esc(name) + '</span>' +
+          '<button type="button" class="btn btn--secondary btn--sm" data-logout>Выйти</button>' +
+        '</div>';
+    } else {
+      auth =
+        '<div class="nav__auth">' +
+          '<a class="btn btn--ghost btn--sm" href="login.html">Войти</a>' +
+          '<a class="btn btn--secondary btn--sm" href="register.html">Регистрация</a>' +
+        '</div>';
     }
-
-    var u = window.api.user() || {};
-    var name = window.api.esc(u.username || '?');
 
     host.innerHTML =
       '<header class="nav">' +
         '<div class="container nav__inner">' +
           '<a class="brand" href="index.html"><span class="brand__dot" aria-hidden="true"></span>Ноготочки</a>' +
-          '<nav class="nav__links" aria-label="Основная навигация">' +
-            '<a href="index.html">Главная</a>' +
-            '<a href="index.html#services">Записаться</a>' +
-          '</nav>' +
-          '<span class="nav__user">' + name + '</span>' +
-          '<button type="button" class="btn btn--secondary btn--sm" data-logout>Выйти</button>' +
+          '<div class="nav__cluster">' +
+            '<nav class="nav__links" aria-label="Основная навигация">' + links + '</nav>' +
+            '<a class="btn btn--primary btn--sm" href="booking.html">Записаться</a>' +
+            auth +
+          '</div>' +
         '</div>' +
       '</header>';
 
@@ -34,5 +55,5 @@
     if (out) out.addEventListener('click', function () { window.api.logout(); });
   }
 
-  mount();
+  window.api.me().then(render).catch(function () { render(null); });
 })();

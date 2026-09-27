@@ -13,7 +13,9 @@ const q = require('../repo/queries');
 const v = require('../lib/validate');
 const { hashPassword, verifyPassword, DUMMY_HASH } = require('../lib/passwords');
 const { asyncH } = require('../lib/http');
-const { issueToken, revokeToken, authRequired } = require('../middleware/auth');
+const {
+  issueToken, revokeToken, authRequired, extract, setSessionCookie, clearSessionCookie,
+} = require('../middleware/auth');
 const { createLimiter } = require('../middleware/rateLimit');
 const { nowDbLocal } = require('../lib/time');
 
@@ -22,6 +24,14 @@ const router = express.Router();
 const loginLimiter = createLimiter({ windowMs: 60 * 1000, max: 5 });
 const registerLimiter = createLimiter({ windowMs: 60 * 1000, max: 5 });
 
+// Ключ rate limit по логину: «IP:username». IP включён в ключ намеренно —
+// иначе несколько атакующих с разных адресов могли бы «заморозить» вход
+// жертвы на окно лимита (pre-auth DoS). Сам IP уже ограничен лимитером-
+// мидлварой (max=5/мин), поэтому в защите от подбора ничего не теряем.
+function loginKey(req, username) {
+  return `${(req.ip || req.socket.remoteAddress || 'unknown')}:${String(username).toLowerCase()}`;
+}
+
 // Регистрация клиентского аккаунта: users + роль client + профиль clients.
 router.post('/register', registerLimiter, asyncH(async (req, res) => {
   const username = v.username(req.body.username);
@@ -29,7 +39,7 @@ router.post('/register', registerLimiter, asyncH(async (req, res) => {
   const name = v.name(req.body.name);
   const phone = v.phone(req.body.phone);
 
-  if (!registerLimiter.allowKeyed(`login:${username.toLowerCase()}`)) {
+  if (!registerLimiter.allowKeyed(loginKey(req, username))) {
     return res.status(429).json({
       error: { message: 'Слишком много попыток. Попробуйте позже.', code: 'RATE_LIMITED' },
     });
@@ -57,6 +67,8 @@ router.post('/register', registerLimiter, asyncH(async (req, res) => {
   })();
 
   const token = issueToken({ id: userId, username });
+  // Веб-фронт не хранит токен: сессия доезжает до браузера в httpOnly-куке.
+  setSessionCookie(res, token);
   return res.status(201).json({
     token,
     user: { id: userId, username, roles: ['client'], client_id: q.clientIdForUser(userId) },
@@ -68,7 +80,7 @@ router.post('/login', loginLimiter, asyncH(async (req, res) => {
   const username = v.username(req.body.username);
   const password = v.password(req.body.password);
 
-  if (!loginLimiter.allowKeyed(`login:${username.toLowerCase()}`)) {
+  if (!loginLimiter.allowKeyed(loginKey(req, username))) {
     return res.status(429).json({
       error: { message: 'Слишком много попыток. Попробуйте позже.', code: 'RATE_LIMITED' },
     });
@@ -88,13 +100,30 @@ router.post('/login', loginLimiter, asyncH(async (req, res) => {
   const roles = q.userRoles(user.id);
   const clientId = roles.includes('client') ? q.clientIdForUser(user.id) : null;
   const token = issueToken(user);
+  // Кука как транспорт сессии для веб-фронта (токен на клиенте не хранится).
+  setSessionCookie(res, token);
   return res.json({ token, user: q.publicUser(user, { roles, clientId }) });
 }));
 
+// Кто я: текущий пользователь по куке/Bearer. Нужен веб-фронту, чтобы «помнить»
+// пользователя между страницами без хранения токена на клиенте (localStorage).
+router.get('/me', authRequired, asyncH(async (req, res) => {
+  const roles = req.user.roles;
+  const clientId = roles.includes('client') ? q.clientIdForUser(req.user.id) : null;
+  const user = q.publicUser(req.user, { roles, clientId });
+  // Для приветствия на кабинете добавляем имя клиента (данные из БД).
+  if (clientId) {
+    const client = q.clientById(clientId);
+    if (client) user.client_name = client.name;
+  }
+  return res.json({ user });
+}));
+
 // Выход: сессия отзывается в БД (revoked_at) сразу — до срока действия.
+// Токен берём из Bearer или куки; куку снимаем.
 router.post('/logout', authRequired, asyncH(async (req, res) => {
-  const token = String(req.get('authorization') || '').replace(/^Bearer\s+/i, '');
-  revokeToken(token);
+  revokeToken(extract(req));
+  clearSessionCookie(res);
   return res.status(204).end();
 }));
 

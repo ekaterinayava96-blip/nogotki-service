@@ -12,15 +12,7 @@
 </head>
 <body>
 
-  <header class="nav">
-    <div class="container nav__inner">
-      <a class="brand" href="index.html"><span class="brand__dot" aria-hidden="true"></span>Ноготочки</a>
-      <nav class="nav__links" aria-label="Основная навигация">
-        <a href="index.html">На главную</a>
-        <a href="login.html">Вход</a>
-      </nav>
-    </div>
-  </header>
+  <div id="global-header"></div>
 
   <main class="auth-wall">
     <h1>Регистрация клиента</h1>
@@ -29,28 +21,32 @@
         Имя и телефон будут использоваться для записи — они подставляются в карточку брони автоматически.
       </p>
       <div id="error" class="alert alert--error" hidden></div>
-      <div id="ok" class="alert alert--success" hidden></div>
 
       <form id="register-form" novalidate>
         <div class="field">
           <label for="reg-username">Логин</label>
-          <input id="reg-username" name="username" autocomplete="username" placeholder="Только латиница, цифры, _ и ." required>
+          <input id="reg-username" name="username" autocomplete="username"
+                 placeholder="Только латиница, цифры, _ и ." autofocus>
           <span class="hint">3–32 символа: латиница, цифры, «_» и «.»</span>
+          <span class="field__error" hidden></span>
         </div>
         <div class="field">
           <label for="reg-password">Пароль</label>
-          <input id="reg-password" name="password" type="password" autocomplete="new-password" required>
+          <input id="reg-password" name="password" type="password" autocomplete="new-password">
           <span class="hint">Минимум 8 символов</span>
+          <span class="field__error" hidden></span>
         </div>
         <div class="field">
           <label for="reg-name">Имя</label>
-          <input id="reg-name" name="name" autocomplete="name" placeholder="Как к вам обращаться" required>
+          <input id="reg-name" name="name" autocomplete="name" placeholder="Как к вам обращаться">
           <span class="hint">Минимум 2 символа</span>
+          <span class="field__error" hidden></span>
         </div>
         <div class="field">
           <label for="reg-phone">Телефон</label>
-          <input id="reg-phone" name="phone" autocomplete="tel" placeholder="+7 900 000-00-00" required>
+          <input id="reg-phone" name="phone" autocomplete="tel" placeholder="+7 900 000-00-00" inputmode="tel">
           <span class="hint">10–15 цифр, допускается ведущий «+»</span>
+          <span class="field__error" hidden></span>
         </div>
         <div class="form-actions">
           <button type="submit" class="btn btn--primary btn--md btn--block">Зарегистрироваться</button>
@@ -62,26 +58,103 @@
   </main>
 
   <script src="js/api.js"></script>
+  <script src="js/header.js"></script>
   <script>
     (function () {
-      document.getElementById('register-form').addEventListener('submit', function (ev) {
+      var form = document.getElementById('register-form');
+      var fields = {
+        username: document.getElementById('reg-username'),
+        password: document.getElementById('reg-password'),
+        name: document.getElementById('reg-name'),
+        phone: document.getElementById('reg-phone')
+      };
+      var submit = form.querySelector('button[type="submit"]');
+
+      window.api.me().then(function (user) {
+        if (user) window.ui.afterAuth();
+      });
+
+      function fieldError(key, msg) {
+        var input = fields[key];
+        var box = input.closest('.field');
+        var el = box.querySelector('.field__error');
+        if (msg) {
+          box.classList.add('field--invalid');
+          el.textContent = msg;
+          el.hidden = false;
+        } else {
+          box.classList.remove('field--invalid');
+          el.textContent = '';
+          el.hidden = true;
+        }
+      }
+      function clearFieldErrors(keys) {
+        keys = keys || Object.keys(fields);
+        keys.forEach(function (k) { fieldError(k, ''); });
+      }
+      Object.keys(fields).forEach(function (k) {
+        fields[k].addEventListener('input', function () { fieldError(k, ''); });
+      });
+
+      // Зеркало серверных правил (validate.js) — подсказка до отправки.
+      // Решение — на сервере, его ответ показываем ниже после отправки.
+      var USERNAME_RE = /^[a-zA-Z0-9_.]{3,32}$/;
+      var PHONE_RE = /^\+?[0-9]{10,15}$/;
+
+      // Какому полю принадлежит ошибка сервера (по коду или по тексту).
+      function fieldByServerError(err) {
+        if (err.code === 'USERNAME_TAKEN') return 'username';
+        if (err.code === 'PHONE_TAKEN') return 'phone';
+        var m = ' ' + String(err.message || '') + ' ';
+        if (/username|Логин/.test(m)) return 'username';
+        if (/password|Пароль/.test(m)) return 'password';
+        if (/Поле «name»|имя/i.test(m)) return 'name';
+        if (/phone|Телефон/.test(m)) return 'phone';
+        return null;
+      }
+
+      form.addEventListener('submit', function (ev) {
         ev.preventDefault();
         window.ui.clear();
-        var submit = this.querySelector('button[type="submit"]');
-        submit.disabled = true;
+        clearFieldErrors();
 
         var body = {
-          username: document.getElementById('reg-username').value.trim(),
-          password: document.getElementById('reg-password').value,
-          name: document.getElementById('reg-name').value.trim(),
-          phone: document.getElementById('reg-phone').value.trim()
+          username: fields.username.value.trim(),
+          password: fields.password.value,
+          name: fields.name.value.trim(),
+          phone: fields.phone.value.trim()
         };
+
+        var ok = true;
+        if (!USERNAME_RE.test(body.username)) {
+          fieldError('username', 'Логин: только латиница, цифры, «_» и «.» (3–32 симв.).');
+          ok = false;
+        }
+        if (body.password.length < 8) {
+          fieldError('password', 'Пароль должен быть не короче 8 символов.');
+          ok = false;
+        }
+        if (body.name.length < 2) {
+          fieldError('name', 'Имя должно содержать не меньше 2 символов.');
+          ok = false;
+        }
+        if (!PHONE_RE.test(body.phone)) {
+          fieldError('phone', 'Телефон: 10–15 цифр, допускается ведущий «+».');
+          ok = false;
+        }
+        if (!ok) return;
+
+        submit.disabled = true;
         window.api.request('/api/auth/register', { method: 'POST', json: body })
-          .then(function (r) {
-            window.api.saveAuth(r.token, r.user);
-            window.location.href = 'register-ok.html';
+          .then(function () {
+            window.ui.afterAuth();
           })
-          .catch(function () { submit.disabled = false; });
+          .catch(function (err) {
+            submit.disabled = false;
+            // Текст ошибки уже показал api.request в #error; поле — по ответу.
+            var key = fieldByServerError(err);
+            if (key) fieldError(key, err.message);
+          });
       });
     })();
   </script>

@@ -1,53 +1,40 @@
 'use strict';
 
-// Общий помощник боевого фронтенда (web/): токен, запросы, показ ошибок текстом,
-// форматирование. Запросы идут на тот же origin, что сервит страницы (Express
-// раздаёт web/), поэтому CORS не нужен.
+// Общий помощник боевого фронтенда (web/): запросы с кукой-сессией, показ
+// ошибок текстом, форматирование. Сессия живёт на сервере (httpOnly-кука,
+// ставится при входе/регистрации) — токен на клиенте НЕ хранится ни в
+// localStorage, ни в памяти. Запросы идут на тот же origin, что сервит
+// страницы (Express раздаёт web/), поэтому CORS не нужен.
 
 (function () {
-  var TOKEN_KEY = 'nogotki_token';
-  var USER_KEY = 'nogotki_user';
   var SALON_OFFSET_MINUTES = 180; // UTC+3, как lib/time.js на бэкенде
 
   function pad(n) { return String(n).padStart(2, '0'); }
 
-  function getUser() {
-    try { return JSON.parse(localStorage.getItem(USER_KEY)) || null; } catch (e) { return null; }
-  }
-
-  function clearAuth() {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
-  }
-
   window.api = {
-    token: function () { return localStorage.getItem(TOKEN_KEY); },
-    user: getUser,
-    isAuthed: function () { return !!localStorage.getItem(TOKEN_KEY); },
-    hasRole: function (role) {
-      var u = getUser();
-      return !!(u && u.roles && u.roles.indexOf(role) !== -1);
+    // Текущий пользователь по сессии (кука). Не залогинен → null.
+    me: function () {
+      return fetch('/api/auth/me').then(function (res) {
+        if (!res.ok) return null;
+        return res.json().catch(function () { return null; });
+      }).then(function (data) {
+        return data && data.user ? data.user : null;
+      });
     },
-    saveAuth: function (token, u) {
-      localStorage.setItem(TOKEN_KEY, token);
-      localStorage.setItem(USER_KEY, JSON.stringify(u));
-    },
-    clearAuth: clearAuth,
+
+    // Выход: сервер отзывает сессию и снимает куку.
     logout: function () {
-      var headers = { 'Authorization': 'Bearer ' + window.api.token() };
-      fetch('/api/auth/logout', { method: 'POST', headers: headers }).catch(function () {});
-      clearAuth();
+      fetch('/api/auth/logout', { method: 'POST' }).catch(function () {});
       window.location.href = 'login.html';
     },
 
-    // Универсальный запрос. При ошибке выводит текст в элемент #error (страница),
-    // а также бросает исключение с полями status/code/data.
+    // Универсальный запрос. Кука уходит автоматически (same-origin).
+    // При ошибке выводит текст в элемент #error и бросает исключение
+    // с полями status/code/data.
     request: function (path, opts) {
       opts = opts || {};
       var headers = Object.assign({}, opts.headers || {});
       if (opts.json !== undefined) headers['Content-Type'] = 'application/json';
-      var t = window.api.token();
-      if (t) headers['Authorization'] = 'Bearer ' + t;
 
       return fetch(path, {
         method: opts.method || 'GET',
@@ -97,6 +84,23 @@
       return window.api.day(iso) + ' ' + window.api.hour(iso);
     },
 
+    // Сегодняшний календарный день салона: «YYYY-MM-DD»
+    todaySalon: function () {
+      return new Date(Date.now() + SALON_OFFSET_MINUTES * 60000).toISOString().slice(0, 10);
+    },
+
+    // значения <input type="datetime-local"> (салонное время) -> ISO +03:00
+    inputToIso: function (value) {
+      if (!value) return null;
+      return value + ':00+03:00';
+    },
+
+    // datetime-local из ISO (для подстановки в форму переноса)
+    isoToInput: function (iso) {
+      var d = new Date(new Date(iso).getTime() + SALON_OFFSET_MINUTES * 60000);
+      return d.toISOString().slice(0, 16);
+    },
+
     // HTML-экранирование пользовательских строк
     esc: function (s) {
       return String(s == null ? '' : s)
@@ -105,8 +109,18 @@
     }
   };
 
+  // Словари статусов (те же, что в черновом фронтенде)
+  window.BOOKING_STATUS = {
+    wait: 'Ожидает',
+    confirmed: 'Подтверждена',
+    done: 'Выполнена',
+    canceled: 'Отменена'
+  };
+  window.FEEDBACK_STATUS = { new: 'Новое', read: 'Прочитано', answered: 'Отвечено' };
+
   // Сообщения на странице: #error (красный) и #ok (зелёный)
   window.ui = {
+    isTarget: function (id) { return !!document.getElementById(id); },
     error: function (msg) {
       var el = document.getElementById('error');
       if (el) { el.textContent = msg; el.hidden = false; }
@@ -121,15 +135,19 @@
         var el = document.getElementById(x.id);
         if (el) el.hidden = true;
       });
+    },
+    // Внутренний путь вида «booking.html?service=1». Всё, что не похоже на
+    // файл внутри web/ (http://, //внешний.хост, ../), отбрасывается —
+    // иначе через returnTo можно было бы увести клиента на чужой сайт.
+    safePath: function (value, fallback) {
+      var v = String(value == null ? '' : value);
+      return /^[\w.\-]+\.html(\?[\w.\-=&%]*)?$/.test(v) ? v : fallback;
+    },
+    // Куда отправить после успешного входа/регистрации: адрес из returnTo,
+    // иначе кабинет.
+    afterAuth: function (fallback) {
+      var q = new URLSearchParams(window.location.search).get('returnTo');
+      window.location.href = window.ui.safePath(q, fallback || 'appointments.html');
     }
-  };
-
-  // Редирект на вход, если токена нет
-  window.requireAuth = function () {
-    if (!window.api.isAuthed()) {
-      window.location.href = 'login.html';
-      return false;
-    }
-    return true;
   };
 })();

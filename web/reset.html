@@ -12,33 +12,24 @@
 </head>
 <body>
 
-  <header class="nav">
-    <div class="container nav__inner">
-      <a class="brand" href="index.html"><span class="brand__dot" aria-hidden="true"></span>Ноготочки</a>
-      <nav class="nav__links" aria-label="Основная навигация">
-        <a href="login.html">Вход</a>
-      </nav>
-    </div>
-  </header>
+  <div id="global-header"></div>
 
   <main class="auth-wall">
     <h1>Новый пароль</h1>
     <div class="panel">
-      <p class="hint" style="margin-bottom:var(--space-5)">
-        Задайте новый пароль для вашего аккаунта.
-      </p>
       <div id="error" class="alert alert--error" hidden></div>
-      <div id="ok" class="alert alert--success" hidden></div>
 
       <form id="reset-form" novalidate>
         <div class="field">
           <label for="reset-password">Новый пароль</label>
-          <input id="reset-password" name="password" type="password" autocomplete="new-password" required>
+          <input id="reset-password" name="password" type="password" autocomplete="new-password" autofocus>
           <span class="hint">Минимум 8 символов</span>
+          <span class="field__error" hidden></span>
         </div>
         <div class="field">
           <label for="reset-password2">Повторите пароль</label>
-          <input id="reset-password2" name="password2" type="password" autocomplete="new-password" required>
+          <input id="reset-password2" name="password2" type="password" autocomplete="new-password">
+          <span class="field__error" hidden></span>
         </div>
         <div class="form-actions">
           <button type="submit" class="btn btn--primary btn--md btn--block">Сохранить пароль</button>
@@ -50,27 +41,56 @@
   </main>
 
   <script src="js/api.js"></script>
+  <script src="js/header.js"></script>
   <script>
     (function () {
-      document.getElementById('reset-form').addEventListener('submit', function (ev) {
+      var form = document.getElementById('reset-form');
+      var p1 = document.getElementById('reset-password');
+      var p2 = document.getElementById('reset-password2');
+      var submit = form.querySelector('button[type="submit"]');
+
+      function fieldError(input, msg) {
+        var box = input.closest('.field');
+        var el = box.querySelector('.field__error');
+        if (msg) {
+          box.classList.add('field--invalid');
+          el.textContent = msg;
+          el.hidden = false;
+        } else {
+          box.classList.remove('field--invalid');
+          el.textContent = '';
+          el.hidden = true;
+        }
+      }
+      [p1, p2].forEach(function (input) {
+        input.addEventListener('input', function () { fieldError(input, ''); });
+      });
+
+      form.addEventListener('submit', function (ev) {
         ev.preventDefault();
         window.ui.clear();
-        var submit = this.querySelector('button[type="submit"]');
-        var p1 = document.getElementById('reset-password').value;
-        var p2 = document.getElementById('reset-password2').value;
+        fieldError(p1, '');
+        fieldError(p2, '');
 
-        if (p1 !== p2) {
-          window.ui.error('Пароли не совпадают.');
-          return;
+        var password = p1.value;
+        var ok = true;
+        if (password.length < 8) {
+          fieldError(p1, 'Пароль должен быть не короче 8 символов.');
+          ok = false;
         }
+        if (password !== p2.value) {
+          fieldError(p2, 'Пароли не совпадают.');
+          ok = false;
+        }
+        if (!ok) return;
 
         submit.disabled = true;
-        var body = { password: p1 };
-        window.api.request('/api/auth/password/reset', { method: 'POST', json: body })
-          .then(function () {
-            window.location.href = 'login.html';
-          })
-          .catch(function () { submit.disabled = false; });
+        // Эндпоинт сброса в API не реализован: сервер вернёт 404,
+        // и его ответ показываем текстом, как и любую другую ошибку.
+        window.api.request('/api/auth/password/reset', {
+          method: 'POST',
+          json: { password: password, password2: p2.value }
+        }).catch(function () { submit.disabled = false; });
       });
     })();
   </script>

@@ -1,6 +1,8 @@
 'use strict';
 
-// Аутентификация и авторизация. Токен: «Authorization: Bearer <random>».
+// Аутентификация и авторизация. Токен: «Authorization: Bearer <random>» либо
+// одноимённая httpOnly-кука (транспорт для того же токена — веб-фронт не хранит
+// токен на клиенте, сервер сам ставит/снимает куку).
 // Сам токен клиенту выдаётся один раз и нигде не сохраняется полностью:
 // в БД (auth_sessions) лежит только его SHA-256 + срок действия + отзыв.
 // Роли читаются из user_roles на КАЖДЫЙ запрос — не из payload токена и
@@ -11,6 +13,42 @@ const crypto = require('crypto');
 const config = require('../config');
 const q = require('../repo/queries');
 const { toDbLocal } = require('../lib/time');
+
+const SESSION_COOKIE = 'nogotki_session';
+
+// Куки разбираем вручную: зависимость cookie-parser не нужна, читать надо
+// только одну. Значение куки — URL-энкод; токены base64url энкодинг почти не
+// меняют, но decode выполняем для корректности у остальных клиентов.
+function readCookie(req, name) {
+  const header = req.headers.cookie || '';
+  for (const part of header.split(';')) {
+    const i = part.indexOf('=');
+    if (i === -1) continue;
+    if (part.slice(0, i).trim() === name) {
+      try { return decodeURIComponent(part.slice(i + 1).trim()); } catch (_) { return null; }
+    }
+  }
+  return null;
+}
+
+function setSessionCookie(res, token) {
+  res.cookie(SESSION_COOKIE, token, {
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/',
+    secure: config.isProduction,
+    maxAge: config.authTtlSeconds * 1000,
+  });
+}
+
+function clearSessionCookie(res) {
+  res.clearCookie(SESSION_COOKIE, {
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/',
+    secure: config.isProduction,
+  });
+}
 
 function sha256Hex(value) {
   return crypto.createHash('sha256').update(value, 'utf8').digest('hex');
@@ -34,7 +72,9 @@ function issueToken(user) {
 function extract(req) {
   const h = req.get('authorization') || '';
   const m = /^Bearer\s+(.+)$/i.exec(h.trim());
-  return m ? m[1] : null;
+  if (m) return m[1];
+  // Веб-фронт ходит на тот же origin; сессия доезжает в httpOnly-куке.
+  return readCookie(req, SESSION_COOKIE);
 }
 
 // Проверка токена по БД. Роли загружаются каждый раз из user_roles.
@@ -93,11 +133,14 @@ function revokeToken(token) {
 }
 
 module.exports = {
+  SESSION_COOKIE,
   issueToken,
   extract,
   authenticate,
   hasRole,
   revokeToken,
+  setSessionCookie,
+  clearSessionCookie,
   authRequired,
   requireRole,
 };

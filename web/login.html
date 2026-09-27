@@ -12,30 +12,24 @@
 </head>
 <body>
 
-  <header class="nav">
-    <div class="container nav__inner">
-      <a class="brand" href="index.html"><span class="brand__dot" aria-hidden="true"></span>Ноготочки</a>
-      <nav class="nav__links" aria-label="Основная навигация">
-        <a href="index.html">На главную</a>
-        <a href="register.html">Регистрация</a>
-      </nav>
-    </div>
-  </header>
+  <div id="global-header"></div>
 
   <main class="auth-wall">
     <h1>Вход в аккаунт</h1>
     <div class="panel">
       <div id="error" class="alert alert--error" hidden></div>
-      <div id="ok" class="alert alert--success" hidden></div>
 
       <form id="login-form" novalidate>
         <div class="field">
           <label for="login-username">Логин</label>
-          <input id="login-username" name="username" autocomplete="username" placeholder="Латиница, цифры, _ и ." required>
+          <input id="login-username" name="username" autocomplete="username"
+                 placeholder="Латиница, цифры, _ и ." autofocus>
+          <span class="field__error" hidden></span>
         </div>
         <div class="field">
           <label for="login-password">Пароль</label>
-          <input id="login-password" name="password" type="password" autocomplete="current-password" required>
+          <input id="login-password" name="password" type="password" autocomplete="current-password">
+          <span class="field__error" hidden></span>
         </div>
         <div class="form-actions">
           <button type="submit" class="btn btn--primary btn--md btn--block">Войти</button>
@@ -48,24 +42,89 @@
   </main>
 
   <script src="js/api.js"></script>
+  <script src="js/header.js"></script>
   <script>
     (function () {
-      document.getElementById('login-form').addEventListener('submit', function (ev) {
+      var form = document.getElementById('login-form');
+      var username = document.getElementById('login-username');
+      var password = document.getElementById('login-password');
+      var submit = form.querySelector('button[type="submit"]');
+
+      // Уже вошли (кука есть) — сразу туда, откуда пришли (returnTo),
+      // иначе в кабинет, с паролем не дёргаем сервер.
+      window.api.me().then(function (user) {
+        if (user) window.ui.afterAuth();
+      });
+
+      function fieldBox(input) {
+        return input.closest('.field');
+      }
+      function fieldError(input, msg) {
+        var box = fieldBox(input);
+        if (!box) return;
+        var el = box.querySelector('.field__error');
+        if (msg) {
+          box.classList.add('field--invalid');
+          el.textContent = msg;
+          el.hidden = false;
+        } else {
+          box.classList.remove('field--invalid');
+          el.textContent = '';
+          el.hidden = true;
+        }
+      }
+      function clearFieldErrors() {
+        fieldError(username, '');
+        fieldError(password, '');
+      }
+      [username, password].forEach(function (input) {
+        input.addEventListener('input', function () { fieldError(input, ''); });
+      });
+
+      // Зеркало серверных правил (validate.js) — для мгновенной подсказки.
+      // Настоящая проверка всё равно на сервере, её ответ показываем ниже.
+      function validUsername(v) { return /^[a-zA-Z0-9_.]{3,32}$/.test(v.trim()); }
+
+      form.addEventListener('submit', function (ev) {
         ev.preventDefault();
         window.ui.clear();
-        var submit = this.querySelector('button[type="submit"]');
-        submit.disabled = true;
+        clearFieldErrors();
 
         var body = {
-          username: document.getElementById('login-username').value.trim(),
-          password: document.getElementById('login-password').value
+          username: username.value.trim(),
+          password: password.value
         };
+
+        var ok = true;
+        if (!validUsername(body.username)) {
+          fieldError(username, 'Логин: только латиница, цифры, «_» и «.» (3–32 симв.).');
+          ok = false;
+        }
+        if (body.password.length < 8) {
+          fieldError(password, 'Пароль должен быть не короче 8 символов.');
+          ok = false;
+        }
+        if (!ok) return;
+
+        submit.disabled = true;
         window.api.request('/api/auth/login', { method: 'POST', json: body })
-          .then(function (r) {
-            window.api.saveAuth(r.token, r.user);
-            window.location.href = 'login-ok.html';
+          .then(function () {
+            window.ui.afterAuth();
           })
-          .catch(function () { submit.disabled = false; });
+          .catch(function (err) {
+            submit.disabled = false;
+            // Что сказал сервер, показываем в #error (пишет api.request).
+            // Поле подсвечиваем, если сервер указал, где проблема.
+            if (err.code === 'INVALID_CREDENTIALS') {
+              var msg = 'Неверный логин или пароль.';
+              fieldError(username, msg);
+              fieldError(password, msg);
+            } else if (err.status === 400 || err.code === 'USERNAME_TAKEN' || err.code === 'PHONE_TAKEN') {
+              var m = String(err.message || '');
+              if (/username|Логин/.test(m)) fieldError(username, err.message);
+              else if (/password|Пароль/.test(m)) fieldError(password, err.message);
+            }
+          });
       });
     })();
   </script>

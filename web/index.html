@@ -13,36 +13,26 @@
 </head>
 <body>
 
-  <header class="nav">
-    <div class="container nav__inner">
-      <a class="brand" href="index.html"><span class="brand__dot" aria-hidden="true"></span>Ноготочки</a>
-      <nav class="nav__links" aria-label="Основная навигация">
-        <a href="#services">Услуги и цены</a>
-        <a href="#about">О студии</a>
-        <a href="login.html">Войти</a>
-        <a class="btn btn--primary btn--sm" href="#services">Записаться</a>
-      </nav>
-    </div>
-  </header>
+  <div id="global-header"></div>
 
   <main>
     <div class="container">
+      <div id="notice" class="alert alert--warning" hidden></div>
       <div id="error" class="alert alert--error" hidden></div>
-      <div id="ok" class="alert alert--success" hidden></div>
     </div>
 
     <!-- ГЕРО -->
     <section class="hero">
       <div class="container">
-        <span class="hero__badge">Стерильно · уютно · красиво</span>
+        <span class="hero__badge">💖 Стерильно · уютно · красиво</span>
         <h1>Студия маникюра<br />и бровей «Ноготочки»</h1>
         <p class="hero__sub">
           Запишитесь на маникюр, педикюр или оформление бровей за 2 минуты —
           выберите мастера, удобные дату и время, а подтверждение придёт автоматически.
         </p>
         <div class="hero__cta">
-          <a class="btn btn--primary btn--lg" href="#services">Записаться онлайн</a>
-          <a class="btn btn--ghost btn--lg" href="#about">О студии</a>
+          <a class="btn btn--primary btn--lg" href="booking.html">Записаться онлайн</a>
+          <a class="btn btn--ghost btn--lg" href="#services">Смотреть услуги</a>
         </div>
       </div>
     </section>
@@ -52,9 +42,13 @@
       <div class="container">
         <h2 style="margin-bottom:var(--space-2)">Услуги и цены</h2>
         <p style="color:var(--color-text-muted); margin-bottom:var(--space-6)">
-          Работаем с ведущими мастерами с собственным направлением. Приём только по предварительной записи.
+          Работаем со вторника по субботу, с 10:00 до 20:00. Приём только по предварительной записи.
         </p>
-        <div id="servicesGrid" class="grid"></div>
+        <div id="servicesGrid" class="grid">
+          <div class="skeleton skel-card"></div>
+          <div class="skeleton skel-card"></div>
+          <div class="skeleton skel-card"></div>
+        </div>
       </div>
     </section>
 
@@ -65,7 +59,11 @@
         <p style="text-align:center; color:var(--color-text-muted); margin-bottom:var(--space-6)">
           Каждый мастер специализируется на своём направлении, поэтому вы попадаете к профи своего дела.
         </p>
-        <div id="mastersGrid" class="grid"></div>
+        <div id="mastersGrid" class="grid">
+          <div class="skeleton skel-row"></div>
+          <div class="skeleton skel-row"></div>
+          <div class="skeleton skel-row"></div>
+        </div>
       </div>
     </section>
 
@@ -73,7 +71,75 @@
     <section id="about">
       <div class="container">
         <h2 style="text-align:center; margin-bottom:var(--space-6)">О студии</h2>
-        <div class="grid" id="studioGrid"></div>
+        <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr))">
+          <div class="panel" style="text-align:center">
+            <div class="panel__icon">📍</div>
+            <h3>Адрес</h3>
+            <p id="st-address" style="color:var(--color-text-muted)">Загружается…</p>
+          </div>
+          <div class="panel" style="text-align:center">
+            <div class="panel__icon">📞</div>
+            <h3>Телефон</h3>
+            <p id="st-phone" style="color:var(--color-text-muted)">Загружается…</p>
+          </div>
+          <div class="panel" style="text-align:center">
+            <div class="panel__icon">🕙</div>
+            <h3>График работы</h3>
+            <p id="st-schedule" style="color:var(--color-text-muted)">Загружается…</p>
+          </div>
+          <div class="panel" style="text-align:center">
+            <div class="panel__icon">💬</div>
+            <h3>Telegram</h3>
+            <p id="st-telegram" style="color:var(--color-text-muted)">Загружается…</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- КАК ЗАПИСАТЬСЯ -->
+    <section style="background:var(--color-bg-subtle)">
+      <div class="container">
+        <h2 style="text-align:center; margin-bottom:var(--space-6)">Как проходит запись</h2>
+        <div class="grid">
+          <div class="panel" style="text-align:center">
+            <div class="panel__icon">1️⃣</div>
+            <h3>Выберите услугу</h3>
+            <p style="color:var(--color-text-muted); font-size:var(--font-size-sm)">Каталог с ценами и длительностью процедур</p>
+          </div>
+          <div class="panel" style="text-align:center">
+            <div class="panel__icon">2️⃣</div>
+            <h3>Выберите мастера и время</h3>
+            <p style="color:var(--color-text-muted); font-size:var(--font-size-sm)">Свободные слоты видны вживую, без звонков</p>
+          </div>
+          <div class="panel" style="text-align:center">
+            <div class="panel__icon">3️⃣</div>
+            <h3>Получите подтверждение</h3>
+            <p style="color:var(--color-text-muted); font-size:var(--font-size-sm)">Мастер подтвердит запись и напомнит за сутки</p>
+          </div>
+        </div>
+      </div>
+    <!-- ЧТО ГОВОРЯТ КЛИЕНТЫ -->
+    <section id="reviews">
+      <div class="container">
+        <h2 style="text-align:center; margin-bottom:var(--space-6)">Что говорят клиенты</h2>
+        <div class="grid">
+          <article class="review">
+            <h3 class="review__title">Все в одном месте</h3>
+            <p class="review__text">Приходила на комплекс «маникюр + брови». Мастера сработали профессионально, сэкономили мне кучу времени. Особенно порадовало удобство онлайн-записи: на одной странице выбрала обе услуги друг за другом, это гениально!</p>
+          </article>
+          <article class="review">
+            <h3 class="review__title">Комфорт от записи до результата</h3>
+            <p class="review__text">Прекрасный салон с высоким уровнем сервиса. Маникюр и архитектура бровей — выше всяких похвал. Отдельная благодарность за простую онлайн-запись — всё наглядно, быстро и приходят удобные SMS-напоминания о визите.</p>
+          </article>
+          <article class="review">
+            <h3 class="review__title">Безупречный результат</h3>
+            <p class="review__text">Делала маникюр с покрытием у мастера Анны. Форма идеальная, покрытие тонкое и под кутикулу, держится уже третью неделю без отслоек. Отдельный плюс — удобная онлайн-запись: нашла свободное окошко за две минуты прямо поздно вечером.</p>
+          </article>
+          <article class="review">
+            <h3 class="review__title">Любимая студия</h3>
+            <p class="review__text">Хожу сюда на маникюр регулярно. Инструменты стерильные, крафт-пакеты вскрывают при мне, атмосфера уютная. Очень радует возможность онлайн-записи: не нужно никуда звонить, пара кликов — и визит подтвержден.</p>
+          </article>
+        </div>
       </div>
     </section>
   </main>
@@ -81,14 +147,24 @@
   <footer class="footer">
     <div class="container footer__grid">
       <div>
-        <div class="brand brand--lg"><span class="brand__dot" aria-hidden="true"></span>Ноготочки</div>
+        <div class="brand"><span class="brand__dot" aria-hidden="true"></span>Ноготочки</div>
         <p style="margin-top:var(--space-2)">Студия маникюра и бровей в центре города.</p>
+      </div>
+      <div>
+        <h4>Контакты</h4>
+        <ul>
+          <li>📍 <span id="ft-address">…</span></li>
+          <li>📞 <span id="ft-phone">…</span></li>
+          <li>🕙 График: <span id="ft-schedule">…</span></li>
+          <li>💬 Telegram: <span id="ft-telegram">…</span></li>
+        </ul>
       </div>
       <div>
         <h4>Клиентам</h4>
         <ul>
-          <li><a href="#services">Записаться</a></li>
-          <li><a href="login.html">Войти в аккаунт</a></li>
+          <li><a href="booking.html">Записаться</a></li>
+          <li><a href="appointments.html">Мои записи</a></li>
+          <li><a href="login.html">Войти</a></li>
           <li><a href="register.html">Регистрация</a></li>
         </ul>
       </div>
@@ -96,6 +172,7 @@
   </footer>
 
   <script src="js/api.js"></script>
+  <script src="js/header.js"></script>
   <script>
     (function () {
       var DAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
@@ -103,11 +180,30 @@
       function pad(n) { return String(n).padStart(2, '0'); }
       function hm(min) { return pad(Math.floor(min / 60)) + ':' + pad(min % 60); }
 
+      // «вт–сб, 10:00–20:00» из work_hours API
+      function scheduleText(hours) {
+        if (!hours || !hours.length) return '—';
+        var sorted = hours.slice().sort(function (a, b) { return a.weekday - b.weekday; });
+        var groups = [], cur = [sorted[0]];
+        for (var i = 1; i < sorted.length; i++) {
+          if (sorted[i].weekday === sorted[i - 1].weekday + 1) { cur.push(sorted[i]); }
+          else { groups.push(cur); cur = [sorted[i]]; }
+        }
+        groups.push(cur);
+        var dayNames = groups.map(function (g) {
+          var from = DAYS[(g[0].weekday + 7) % 7];
+          var to = DAYS[(g[g.length - 1].weekday + 7) % 7];
+          return g.length > 1 ? from + '–' + to : from;
+        });
+        var first = sorted[0];
+        return dayNames.join(' · ') + ', ' + hm(first.start_minutes) + '–' + hm(first.end_minutes);
+      }
+
       function renderServices(services) {
         var host = document.getElementById('servicesGrid');
         if (!host) return;
         if (!services || !services.length) {
-          host.innerHTML = '<p>Услуги пока не загружены.</p>';
+          host.innerHTML = '<p class="stub">Услуги пока не загружены.</p>';
           return;
         }
         host.innerHTML = services.map(function (s) {
@@ -116,7 +212,10 @@
             '<p class="card-service__desc">' + window.api.esc(s.description || '') + '</p>' +
             '<div class="card-service__meta">' +
               '<span class="card-service__price">' + window.api.rub(s.price_kopecks) + '</span>' +
-              '<span class="card-service__time">' + (s.duration_minutes || '—') + ' мин</span>' +
+              '<span class="card-service__time">⏱ ' + (s.duration_minutes || '—') + ' мин</span>' +
+            '</div>' +
+            '<div class="card-service__actions">' +
+              '<a class="btn btn--primary btn--block" href="booking.html?service=' + s.id + '">Записаться</a>' +
             '</div>' +
           '</article>';
         }).join('');
@@ -126,7 +225,7 @@
         var host = document.getElementById('mastersGrid');
         if (!host) return;
         if (!masters || !masters.length) {
-          host.innerHTML = '<p>Мастера пока не загружены.</p>';
+          host.innerHTML = '<p class="stub">Мастера пока не загружены.</p>';
           return;
         }
         host.innerHTML = masters.map(function (m) {
@@ -134,42 +233,46 @@
           var photo = m.photo_path
             ? '<img class="master__photo" src="' + window.api.esc(m.photo_path) + '" alt="' + window.api.esc(m.name) + '">'
             : '<div class="master__avatar">' + initials + '</div>';
-          var services = (m.services || []).map(function (s) { return s.name; }).join(', ');
-          return '<div class="master">' +
+          return '<div class="master master--center">' +
             photo +
-            '<div>' +
-              '<div class="master__name">' + window.api.esc(m.name) + '</div>' +
-              '<div class="master__role">' + window.api.esc(m.role || '') + '</div>' +
-              '<div class="master__exp">' + (m.experience_years ? m.experience_years + ' лет опыта' : '') + '</div>' +
-              (services ? '<div class="master__role">' + window.api.esc(services) + '</div>' : '') +
-            '</div>' +
+            '<h3 class="master__title">' + window.api.esc(m.name) + '</h3>' +
+            '<p class="master__role">' + window.api.esc(m.role || '') + '</p>' +
+            '<p class="master__role">' + (m.experience_years ? 'в профессии ' + m.experience_years + ' лет' : 'в профессии') + '</p>' +
           '</div>';
         }).join('');
       }
 
       function renderStudio(st) {
-        var host = document.getElementById('studioGrid');
-        if (!host || !st) return;
-        var hours = (st.work_hours || []).map(function (w) {
-          return DAYS[(w.weekday + 7) % 7] + ' ' + hm(w.start_minutes) + '–' + hm(w.end_minutes);
-        }).join(' · ');
-        var items = [
-          ['Адрес', window.api.esc(st.address || '—')],
-          ['Телефон', window.api.esc(st.phone || '—')],
-          ['Telegram', window.api.esc(st.telegram || '—')],
-          ['График работы', window.api.esc(hours || '—')]
-        ];
-        host.innerHTML = items.map(function (it) {
-          return '<div class="panel">' +
-            '<h3>' + it[0] + '</h3>' +
-            '<p>' + it[1] + '</p>' +
-          '</div>';
-        }).join('');
+        if (!st) return;
+        var schedule = scheduleText(st.work_hours);
+        fmt('st-address', st.address); fmt('st-phone', st.phone);
+        fmt('st-schedule', schedule); fmt('st-telegram', st.telegram);
+        fmt('ft-address', st.address); fmt('ft-phone', st.phone);
+        fmt('ft-schedule', schedule); fmt('ft-telegram', st.telegram);
+        function fmt(id, val) {
+          var el = document.getElementById(id);
+          if (el) el.textContent = val == null || val === '' ? '—' : val;
+        }
       }
 
-      window.api.request('/api/services').then(function (d) { renderServices(d.services); }).catch(function () {});
-      window.api.request('/api/masters').then(function (d) { renderMasters(d.masters); }).catch(function () {});
-      window.api.request('/api/studio').then(function (d) { renderStudio(d.studio); }).catch(function () {});
+      window.api.request('/api/services')
+        .then(function (d) { renderServices(d.services); })
+        .catch(function () {
+          var host = document.getElementById('servicesGrid');
+          if (host) host.innerHTML = '<p class="stub">Не удалось загрузить услуги. Обновите страницу позже.</p>';
+        });
+      window.api.request('/api/masters')
+        .then(function (d) { renderMasters(d.masters); })
+        .catch(function () {
+          var host = document.getElementById('mastersGrid');
+          if (host) host.innerHTML = '<p class="stub">Не удалось загрузить мастеров. Обновите страницу позже.</p>';
+        });
+      window.api.request('/api/studio')
+        .then(function (d) { renderStudio(d.studio); })
+        .catch(function () { fmtAll('—'); function fmtAll(v) {
+          ['st-address', 'st-phone', 'st-schedule', 'st-telegram', 'ft-address', 'ft-phone', 'ft-schedule', 'ft-telegram']
+            .forEach(function (id) { var el = document.getElementById(id); if (el) el.textContent = v; });
+        } });
     })();
   </script>
 </body>

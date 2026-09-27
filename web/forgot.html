@@ -12,54 +12,71 @@
 </head>
 <body>
 
-  <header class="nav">
-    <div class="container nav__inner">
-      <a class="brand" href="index.html"><span class="brand__dot" aria-hidden="true"></span>Ноготочки</a>
-      <nav class="nav__links" aria-label="Основная навигация">
-        <a href="login.html">Вход</a>
-      </nav>
-    </div>
-  </header>
+  <div id="global-header"></div>
 
   <main class="auth-wall">
     <h1>Восстановление пароля</h1>
     <div class="panel">
       <p class="hint" style="margin-bottom:var(--space-5)">
-        Укажите ваш логин — мы отправим ссылку для установки нового пароля.
+        Укажите логин — мы отправим ссылку для сброса пароля на вашу почту.
       </p>
       <div id="error" class="alert alert--error" hidden></div>
-      <div id="ok" class="alert alert--success" hidden></div>
 
       <form id="forgot-form" novalidate>
         <div class="field">
           <label for="forgot-username">Логин</label>
-          <input id="forgot-username" name="username" autocomplete="username" required>
+          <input id="forgot-username" name="username" autocomplete="username"
+                 placeholder="Только латиница, цифры, _ и ." autofocus>
+          <span class="hint">3–32 символа: латиница, цифры, «_» и «.»</span>
+          <span class="field__error" hidden></span>
         </div>
         <div class="form-actions">
-          <button type="submit" class="btn btn--primary btn--md btn--block">Отправить ссылку</button>
+          <button type="submit" class="btn btn--primary btn--md btn--block">Отправить</button>
         </div>
       </form>
 
-      <p class="form-alt"><a href="login.html">Вернуться ко входу</a></p>
+      <p class="form-alt"><a href="login.html">Вспомнили пароль? Войти</a></p>
     </div>
   </main>
 
   <script src="js/api.js"></script>
+  <script src="js/header.js"></script>
   <script>
     (function () {
-      document.getElementById('forgot-form').addEventListener('submit', function (ev) {
+      var form = document.getElementById('forgot-form');
+      var username = document.getElementById('forgot-username');
+      var submit = form.querySelector('button[type="submit"]');
+
+      function fieldError(input, msg) {
+        var box = input.closest('.field');
+        var el = box.querySelector('.field__error');
+        if (msg) {
+          box.classList.add('field--invalid');
+          el.textContent = msg;
+          el.hidden = false;
+        } else {
+          box.classList.remove('field--invalid');
+          el.textContent = '';
+          el.hidden = true;
+        }
+      }
+      username.addEventListener('input', function () { fieldError(username, ''); });
+
+      form.addEventListener('submit', function (ev) {
         ev.preventDefault();
         window.ui.clear();
-        var submit = this.querySelector('button[type="submit"]');
-        submit.disabled = true;
+        fieldError(username, '');
 
-        var body = {
-          username: document.getElementById('forgot-username').value.trim()
-        };
-        window.api.request('/api/auth/password/forgot', { method: 'POST', json: body })
-          .then(function () {
-            window.location.href = 'reset.html';
-          })
+        var value = username.value.trim();
+        if (!/^[a-zA-Z0-9_.]{3,32}$/.test(value)) {
+          fieldError(username, 'Логин: только латиница, цифры, «_» и «.» (3–32 симв.).');
+          return;
+        }
+
+        submit.disabled = true;
+        // Эндпоинт восстановления в API не реализован: сервер вернёт 404,
+        // и его ответ показываем текстом, как и любую другую ошибку.
+        window.api.request('/api/auth/password/forgot', { method: 'POST', json: { username: value } })
           .catch(function () { submit.disabled = false; });
       });
     })();

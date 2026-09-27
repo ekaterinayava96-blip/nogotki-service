@@ -68,6 +68,10 @@
   --radius-xl:   28px;
   --radius-full: 999px;
 
+  /* ---------- ТЕНИ (значения из дизайн-системы: prototype/style.css :root) ---------- */
+  --shadow-sm: 0 1px 3px rgba(74, 32, 48, 0.08);
+  --shadow-md: 0 6px 18px rgba(74, 32, 48, 0.10);
+
   /* ---------- КОНТЕЙНЕР ---------- */
   --container: 1180px;  /* ширина страницы: --container (прототип style.css:68) */
 }
