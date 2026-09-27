@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Регистрация — Ноготочки</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="tokens.css" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+
+  <header class="nav">
+    <div class="container nav__inner">
+      <a class="brand" href="index.html"><span class="brand__dot" aria-hidden="true"></span>Ноготочки</a>
+      <nav class="nav__links" aria-label="Основная навигация">
+        <a href="index.html">На главную</a>
+        <a href="login.html">Вход</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="auth-wall">
+    <h1>Регистрация клиента</h1>
+    <div class="panel">
+      <p class="hint" style="margin-bottom:var(--space-5)">
+        Имя и телефон будут использоваться для записи — они подставляются в карточку брони автоматически.
+      </p>
+      <div id="error" class="alert alert--error" hidden></div>
+      <div id="ok" class="alert alert--success" hidden></div>
+
+      <form id="register-form" novalidate>
+        <div class="field">
+          <label for="reg-username">Логин</label>
+          <input id="reg-username" name="username" autocomplete="username" placeholder="Только латиница, цифры, _ и ." required>
+          <span class="hint">3–32 символа: латиница, цифры, «_» и «.»</span>
+        </div>
+        <div class="field">
+          <label for="reg-password">Пароль</label>
+          <input id="reg-password" name="password" type="password" autocomplete="new-password" required>
+          <span class="hint">Минимум 8 символов</span>
+        </div>
+        <div class="field">
+          <label for="reg-name">Имя</label>
+          <input id="reg-name" name="name" autocomplete="name" placeholder="Как к вам обращаться" required>
+          <span class="hint">Минимум 2 символа</span>
+        </div>
+        <div class="field">
+          <label for="reg-phone">Телефон</label>
+          <input id="reg-phone" name="phone" autocomplete="tel" placeholder="+7 900 000-00-00" required>
+          <span class="hint">10–15 цифр, допускается ведущий «+»</span>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn--primary btn--md btn--block">Зарегистрироваться</button>
+        </div>
+      </form>
+
+      <p class="form-alt">Уже есть аккаунт? <a href="login.html">Войти</a></p>
+    </div>
+  </main>
+
+  <script src="js/api.js"></script>
+  <script>
+    (function () {
+      document.getElementById('register-form').addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        window.ui.clear();
+        var submit = this.querySelector('button[type="submit"]');
+        submit.disabled = true;
+
+        var body = {
+          username: document.getElementById('reg-username').value.trim(),
+          password: document.getElementById('reg-password').value,
+          name: document.getElementById('reg-name').value.trim(),
+          phone: document.getElementById('reg-phone').value.trim()
+        };
+        window.api.request('/api/auth/register', { method: 'POST', json: body })
+          .then(function (r) {
+            window.api.saveAuth(r.token, r.user);
+            window.location.href = 'register-ok.html';
+          })
+          .catch(function () { submit.disabled = false; });
+      });
+    })();
+  </script>
+</body>
+</html>

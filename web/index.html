@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ноготочки — студия маникюра и бровей</title>
+  <meta name="description" content="Запись на маникюр, педикюр и оформление бровей онлайн. Стерильно, уютно и красиво." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="tokens.css" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+
+  <header class="nav">
+    <div class="container nav__inner">
+      <a class="brand" href="index.html"><span class="brand__dot" aria-hidden="true"></span>Ноготочки</a>
+      <nav class="nav__links" aria-label="Основная навигация">
+        <a href="#services">Услуги и цены</a>
+        <a href="#about">О студии</a>
+        <a href="login.html">Войти</a>
+        <a class="btn btn--primary btn--sm" href="#services">Записаться</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="container">
+      <div id="error" class="alert alert--error" hidden></div>
+      <div id="ok" class="alert alert--success" hidden></div>
+    </div>
+
+    <!-- ГЕРО -->
+    <section class="hero">
+      <div class="container">
+        <span class="hero__badge">Стерильно · уютно · красиво</span>
+        <h1>Студия маникюра<br />и бровей «Ноготочки»</h1>
+        <p class="hero__sub">
+          Запишитесь на маникюр, педикюр или оформление бровей за 2 минуты —
+          выберите мастера, удобные дату и время, а подтверждение придёт автоматически.
+        </p>
+        <div class="hero__cta">
+          <a class="btn btn--primary btn--lg" href="#services">Записаться онлайн</a>
+          <a class="btn btn--ghost btn--lg" href="#about">О студии</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- УСЛУГИ -->
+    <section id="services">
+      <div class="container">
+        <h2 style="margin-bottom:var(--space-2)">Услуги и цены</h2>
+        <p style="color:var(--color-text-muted); margin-bottom:var(--space-6)">
+          Работаем с ведущими мастерами с собственным направлением. Приём только по предварительной записи.
+        </p>
+        <div id="servicesGrid" class="grid"></div>
+      </div>
+    </section>
+
+    <!-- МАСТЕРА -->
+    <section id="masters" style="background:var(--color-bg-subtle)">
+      <div class="container">
+        <h2 style="text-align:center; margin-bottom:var(--space-2)">Наши мастера</h2>
+        <p style="text-align:center; color:var(--color-text-muted); margin-bottom:var(--space-6)">
+          Каждый мастер специализируется на своём направлении, поэтому вы попадаете к профи своего дела.
+        </p>
+        <div id="mastersGrid" class="grid"></div>
+      </div>
+    </section>
+
+    <!-- О СТУДИИ -->
+    <section id="about">
+      <div class="container">
+        <h2 style="text-align:center; margin-bottom:var(--space-6)">О студии</h2>
+        <div class="grid" id="studioGrid"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container footer__grid">
+      <div>
+        <div class="brand brand--lg"><span class="brand__dot" aria-hidden="true"></span>Ноготочки</div>
+        <p style="margin-top:var(--space-2)">Студия маникюра и бровей в центре города.</p>
+      </div>
+      <div>
+        <h4>Клиентам</h4>
+        <ul>
+          <li><a href="#services">Записаться</a></li>
+          <li><a href="login.html">Войти в аккаунт</a></li>
+          <li><a href="register.html">Регистрация</a></li>
+        </ul>
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/api.js"></script>
+  <script>
+    (function () {
+      var DAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+
+      function pad(n) { return String(n).padStart(2, '0'); }
+      function hm(min) { return pad(Math.floor(min / 60)) + ':' + pad(min % 60); }
+
+      function renderServices(services) {
+        var host = document.getElementById('servicesGrid');
+        if (!host) return;
+        if (!services || !services.length) {
+          host.innerHTML = '<p>Услуги пока не загружены.</p>';
+          return;
+        }
+        host.innerHTML = services.map(function (s) {
+          return '<article class="card-service">' +
+            '<h3 class="card-service__title">' + window.api.esc(s.name) + '</h3>' +
+            '<p class="card-service__desc">' + window.api.esc(s.description || '') + '</p>' +
+            '<div class="card-service__meta">' +
+              '<span class="card-service__price">' + window.api.rub(s.price_kopecks) + '</span>' +
+              '<span class="card-service__time">' + (s.duration_minutes || '—') + ' мин</span>' +
+            '</div>' +
+          '</article>';
+        }).join('');
+      }
+
+      function renderMasters(masters) {
+        var host = document.getElementById('mastersGrid');
+        if (!host) return;
+        if (!masters || !masters.length) {
+          host.innerHTML = '<p>Мастера пока не загружены.</p>';
+          return;
+        }
+        host.innerHTML = masters.map(function (m) {
+          var initials = window.api.esc((m.name || '?').trim().charAt(0));
+          var photo = m.photo_path
+            ? '<img class="master__photo" src="' + window.api.esc(m.photo_path) + '" alt="' + window.api.esc(m.name) + '">'
+            : '<div class="master__avatar">' + initials + '</div>';
+          var services = (m.services || []).map(function (s) { return s.name; }).join(', ');
+          return '<div class="master">' +
+            photo +
+            '<div>' +
+              '<div class="master__name">' + window.api.esc(m.name) + '</div>' +
+              '<div class="master__role">' + window.api.esc(m.role || '') + '</div>' +
+              '<div class="master__exp">' + (m.experience_years ? m.experience_years + ' лет опыта' : '') + '</div>' +
+              (services ? '<div class="master__role">' + window.api.esc(services) + '</div>' : '') +
+            '</div>' +
+          '</div>';
+        }).join('');
+      }
+
+      function renderStudio(st) {
+        var host = document.getElementById('studioGrid');
+        if (!host || !st) return;
+        var hours = (st.work_hours || []).map(function (w) {
+          return DAYS[(w.weekday + 7) % 7] + ' ' + hm(w.start_minutes) + '–' + hm(w.end_minutes);
+        }).join(' · ');
+        var items = [
+          ['Адрес', window.api.esc(st.address || '—')],
+          ['Телефон', window.api.esc(st.phone || '—')],
+          ['Telegram', window.api.esc(st.telegram || '—')],
+          ['График работы', window.api.esc(hours || '—')]
+        ];
+        host.innerHTML = items.map(function (it) {
+          return '<div class="panel">' +
+            '<h3>' + it[0] + '</h3>' +
+            '<p>' + it[1] + '</p>' +
+          '</div>';
+        }).join('');
+      }
+
+      window.api.request('/api/services').then(function (d) { renderServices(d.services); }).catch(function () {});
+      window.api.request('/api/masters').then(function (d) { renderMasters(d.masters); }).catch(function () {});
+      window.api.request('/api/studio').then(function (d) { renderStudio(d.studio); }).catch(function () {});
+    })();
+  </script>
+</body>
+</html>

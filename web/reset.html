@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Новый пароль — Ноготочки</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="tokens.css" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+
+  <header class="nav">
+    <div class="container nav__inner">
+      <a class="brand" href="index.html"><span class="brand__dot" aria-hidden="true"></span>Ноготочки</a>
+      <nav class="nav__links" aria-label="Основная навигация">
+        <a href="login.html">Вход</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="auth-wall">
+    <h1>Новый пароль</h1>
+    <div class="panel">
+      <p class="hint" style="margin-bottom:var(--space-5)">
+        Задайте новый пароль для вашего аккаунта.
+      </p>
+      <div id="error" class="alert alert--error" hidden></div>
+      <div id="ok" class="alert alert--success" hidden></div>
+
+      <form id="reset-form" novalidate>
+        <div class="field">
+          <label for="reset-password">Новый пароль</label>
+          <input id="reset-password" name="password" type="password" autocomplete="new-password" required>
+          <span class="hint">Минимум 8 символов</span>
+        </div>
+        <div class="field">
+          <label for="reset-password2">Повторите пароль</label>
+          <input id="reset-password2" name="password2" type="password" autocomplete="new-password" required>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn--primary btn--md btn--block">Сохранить пароль</button>
+        </div>
+      </form>
+
+      <p class="form-alt"><a href="login.html">Вернуться ко входу</a></p>
+    </div>
+  </main>
+
+  <script src="js/api.js"></script>
+  <script>
+    (function () {
+      document.getElementById('reset-form').addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        window.ui.clear();
+        var submit = this.querySelector('button[type="submit"]');
+        var p1 = document.getElementById('reset-password').value;
+        var p2 = document.getElementById('reset-password2').value;
+
+        if (p1 !== p2) {
+          window.ui.error('Пароли не совпадают.');
+          return;
+        }
+
+        submit.disabled = true;
+        var body = { password: p1 };
+        window.api.request('/api/auth/password/reset', { method: 'POST', json: body })
+          .then(function () {
+            window.location.href = 'login.html';
+          })
+          .catch(function () { submit.disabled = false; });
+      });
+    })();
+  </script>
+</body>
+</html>

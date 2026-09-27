@@ -40,6 +40,10 @@ app.use('/api/bookings', bookingRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/admin', adminRoutes);
 
+// Боевой веб-фронтенд: статика из web/. Монтируется раньше чернового
+// backend/public, чтобы корень '/' отдавал боевой лендинг (web/index.html).
+app.use(express.static(path.join(__dirname, '..', '..', 'web')));
+
 // Черновой тестовый фронтенд: статика из backend/public. Сервится тем же
 // сервером, что и API (один origin — CORS не нужен), файл / -> index.html.
 app.use(express.static(path.join(__dirname, '..', 'public')));

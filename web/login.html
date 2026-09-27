@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Вход — Ноготочки</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="tokens.css" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+
+  <header class="nav">
+    <div class="container nav__inner">
+      <a class="brand" href="index.html"><span class="brand__dot" aria-hidden="true"></span>Ноготочки</a>
+      <nav class="nav__links" aria-label="Основная навигация">
+        <a href="index.html">На главную</a>
+        <a href="register.html">Регистрация</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="auth-wall">
+    <h1>Вход в аккаунт</h1>
+    <div class="panel">
+      <div id="error" class="alert alert--error" hidden></div>
+      <div id="ok" class="alert alert--success" hidden></div>
+
+      <form id="login-form" novalidate>
+        <div class="field">
+          <label for="login-username">Логин</label>
+          <input id="login-username" name="username" autocomplete="username" placeholder="Латиница, цифры, _ и ." required>
+        </div>
+        <div class="field">
+          <label for="login-password">Пароль</label>
+          <input id="login-password" name="password" type="password" autocomplete="current-password" required>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn--primary btn--md btn--block">Войти</button>
+        </div>
+      </form>
+
+      <p class="form-alt"><a href="forgot.html">Забыли пароль?</a></p>
+      <p class="form-alt">Нет аккаунта? <a href="register.html">Зарегистрироваться</a></p>
+    </div>
+  </main>
+
+  <script src="js/api.js"></script>
+  <script>
+    (function () {
+      document.getElementById('login-form').addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        window.ui.clear();
+        var submit = this.querySelector('button[type="submit"]');
+        submit.disabled = true;
+
+        var body = {
+          username: document.getElementById('login-username').value.trim(),
+          password: document.getElementById('login-password').value
+        };
+        window.api.request('/api/auth/login', { method: 'POST', json: body })
+          .then(function (r) {
+            window.api.saveAuth(r.token, r.user);
+            window.location.href = 'login-ok.html';
+          })
+          .catch(function () { submit.disabled = false; });
+      });
+    })();
+  </script>
+</body>
+</html>
