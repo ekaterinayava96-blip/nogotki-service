@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Мои записи — Ноготочки</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="tokens.css" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+
+  <div id="global-header"></div>
+
+  <main class="container">
+    <section style="padding: var(--space-7) 0">
+      <h1>Мои записи</h1>
+      <p class="hint" id="greet" style="margin: var(--space-2) 0 var(--space-6); color: var(--color-text-muted)"></p>
+
+      <div id="error" class="alert alert--error" hidden></div>
+
+      <div id="loading">
+        <div class="skeleton skel-card"></div>
+        <div class="skeleton skel-card" style="margin-top: var(--space-4)"></div>
+        <div class="skeleton skel-card" style="margin-top: var(--space-4)"></div>
+      </div>
+
+      <div id="list"></div>
+
+      <div id="empty" class="empty-state" hidden>
+        <p>Записей нет — выберите услугу</p>
+        <a class="btn btn--primary btn--md" href="booking.html">Записаться</a>
+        <a class="btn btn--ghost btn--md" href="index.html#services">Услуги и цены</a>
+      </div>
+    </section>
+  </main>
+
+  <script src="js/api.js"></script>
+  <script src="js/header.js"></script>
+  <script>
+    (function () {
+      var list = document.getElementById('list');
+      var empty = document.getElementById('empty');
+      var loading = document.getElementById('loading');
+
+      function hideLoading() { loading.hidden = true; }
+
+      function render(bookings) {
+        hideLoading();
+        if (!bookings.length) { empty.hidden = false; return; }
+        empty.hidden = true;
+        list.innerHTML = bookings.map(function (b) {
+          var badge = 'badge--' + (window.BOOKING_STATUS[b.status] ? b.status : 'wait');
+          var label = window.BOOKING_STATUS[b.status] || b.status;
+          return '<div class="booking-card">' +
+            '<div class="booking-card__head">' +
+              '<span class="booking-card__date">' + window.api.fmt(b.starts_at) +
+                '—' + window.api.hour(b.ends_at) + '</span>' +
+              '<span class="badge ' + badge + '">' + window.api.esc(label) + '</span>' +
+            '</div>' +
+            '<div class="booking-card__service">' + window.api.esc(b.service.name) + '</div>' +
+            '<div class="booking-card__meta">' +
+              window.api.esc(b.master.name) + ' · <span class="booking-card__price">' +
+              window.api.rub(b.service.price_kopecks) + '</span>' +
+            '</div>' +
+          '</div>';
+        }).join('');
+      }
+
+      function showError(msg) {
+        hideLoading();
+        list.innerHTML = '';
+        empty.hidden = true;
+        var el = document.getElementById('error');
+        el.textContent = msg;
+        el.hidden = false;
+      }
+
+      function load() {
+        window.api.request('/api/bookings').then(function (r) {
+          render(r.bookings || []);
+        }).catch(function (err) {
+          if (err.status === 401) { window.location.replace('login.html'); return; }
+          showError(err.message);
+        });
+      }
+
+      // Приветствие — имя из БД (GET /api/auth/me), не подделка на клиенте.
+      window.api.me().then(function (user) {
+        if (!user) { window.location.replace('login.html'); return; }
+        var greet = document.getElementById('greet');
+        var name = user.client_name || user.username;
+        if (greet && name) greet.textContent = 'Здравствуйте, ' + name + '! Ваши записи и их статусы:';
+      });
+
+      load();
+    })();
+  </script>
+</body>
+</html>

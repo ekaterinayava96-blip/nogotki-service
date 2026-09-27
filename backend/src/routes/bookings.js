@@ -215,7 +215,10 @@ router.get(
 );
 
 // PATCH /bookings/:id — перенос записи на другое время.
-// body: { starts_at (UTC ISO) }
+// body: { starts_at (UTC ISO), master_id? }
+// master_id необязателен: без него мастер записи сохраняется; с ним запись
+// переносится на время этого мастера. Проверки (мастер выполняет услугу,
+// слот свободен, триггер от пересечения) — те же, что при создании записи.
 router.patch(
   '/:id',
   authRequired,
@@ -230,19 +233,46 @@ router.patch(
       });
     }
 
+    let effectiveMasterId = row.master_id;
+    if (req.body.master_id !== undefined) {
+      const masterId = v.intId(req.body.master_id, 'master_id');
+      const master = q.masterById(masterId);
+      if (!master || master.is_active !== 1) {
+        return res.status(400).json({ error: { message: 'Мастер не найден.', code: 'UNKNOWN_MASTER' } });
+      }
+      // Новый мастер должен выполнять услугу этой записи (как при создании).
+      const can = db
+        .prepare('SELECT 1 AS hit FROM master_services WHERE master_id = ? AND service_id = ?')
+        .get(masterId, row.service_id);
+      if (!can) {
+        return res.status(400).json({
+          error: { message: 'Мастер не выполняет эту услугу.', code: 'MASTER_SERVICE_MISMATCH' },
+        });
+      }
+      // Та же логика, что при создании записи: роль master ведёт записи
+      // только в свой график.
+      if (hasRole(req.user, 'master')) {
+        const user = q.userById(req.user.id);
+        if (!user || !user.master_id || masterId !== user.master_id) {
+          return res.status(403).json({ error: { message: 'Мастер может вести записи только в свой график.', code: 'FORBIDDEN' } });
+        }
+      }
+      effectiveMasterId = masterId;
+    }
+
     const startUtc = assertNotPast(parseUtcIso(req.body.starts_at), 'starts_at');
     const totalMinutes = row.service_duration;
     const endUtc = new Date(startUtc.getTime() + totalMinutes * 60000);
-    assertSlotFree(row.master_id, startUtc, endUtc);
+    assertSlotFree(effectiveMasterId, startUtc, endUtc);
 
     try {
       db.transaction(() => {
-        q.moveBooking(bookingId, toDbLocal(startUtc), toDbLocal(endUtc));
+        q.moveBooking(bookingId, toDbLocal(startUtc), toDbLocal(endUtc), effectiveMasterId);
       })();
     } catch (err) {
       // Триггер trg_bookings_no_overlap_update запретил перенос на занятое время.
       if (isBookingTimeConflict(err)) {
-        return sendSlotConflict(res, row.master_id, totalMinutes);
+        return sendSlotConflict(res, effectiveMasterId, totalMinutes);
       }
       throw err;
     }

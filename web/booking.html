@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Онлайн-запись — Ноготочки</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="tokens.css" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+
+  <div id="global-header"></div>
+
+  <main class="container" style="padding-top:var(--space-6)">
+    <h2 style="margin-bottom:var(--space-4)">Онлайн-запись</h2>
+    <div id="error" class="alert alert--error" hidden></div>
+
+    <!-- Без входа слот не удержать и запись не создать: показываем вход -->
+    <div id="gate" class="panel" hidden>
+      <h3 style="margin-bottom:var(--space-3)">Чтобы записаться, войдите</h3>
+      <p style="color:var(--color-text-muted); margin-bottom:var(--space-5)">
+        Слот удерживается 10 минут, а запись создаётся на ваш аккаунт — её увидит мастер,
+        и она появится в разделе «Мои записи». После входа вы вернётесь сюда.
+      </p>
+      <a class="btn btn--primary btn--md btn--block" id="gateLogin" href="login.html">Войти</a>
+      <p class="form-alt" style="margin-top:var(--space-4)">Нет аккаунта? <a id="gateRegister" href="register.html">Зарегистрироваться</a></p>
+    </div>
+
+    <div id="flow" hidden>
+      <div class="stepper" id="stepper">
+        <div class="stepper__step is-active" data-step="1"><span class="stepper__num">1</span><span class="stepper__label">Услуга</span></div>
+        <div class="stepper__connector"></div>
+        <div class="stepper__step" data-step="2"><span class="stepper__num">2</span><span class="stepper__label">Мастер</span></div>
+        <div class="stepper__connector"></div>
+        <div class="stepper__step" data-step="3"><span class="stepper__num">3</span><span class="stepper__label">Дата</span></div>
+        <div class="stepper__connector"></div>
+        <div class="stepper__step" data-step="4"><span class="stepper__num">4</span><span class="stepper__label">Время</span></div>
+        <div class="stepper__connector"></div>
+        <div class="stepper__step" data-step="5"><span class="stepper__num">5</span><span class="stepper__label">Контакты</span></div>
+      </div>
+
+      <div class="layout--booking">
+        <div>
+          <!-- ШАГ 1: УСЛУГА -->
+          <div class="step is-visible" id="step-service">
+            <h3 style="margin-bottom:var(--space-4)">Выберите услугу</h3>
+            <div id="serviceList" class="grid">
+              <div class="skeleton skel-row"></div>
+              <div class="skeleton skel-row"></div>
+              <div class="skeleton skel-row"></div>
+            </div>
+          </div>
+
+          <!-- ШАГ 2: МАСТЕР -->
+          <div class="step" id="step-master">
+            <h3 style="margin-bottom:var(--space-4)">Выберите мастера</h3>
+            <div id="masterList" style="display:flex; flex-direction:column; gap:var(--space-3)"></div>
+            <div class="step__nav">
+              <button type="button" class="btn btn--secondary btn--sm" data-back="1">← Назад</button>
+            </div>
+          </div>
+
+          <!-- ШАГ 3: ДАТА -->
+          <div class="step" id="step-date">
+            <h3 style="margin-bottom:var(--space-4)">Выберите дату</h3>
+            <div class="calendar">
+              <div class="calendar__head">
+                <span class="calendar__month" id="calendarMonth"></span>
+                <span class="hint">Ближайшие 14 дней</span>
+              </div>
+              <div class="calendar__grid" id="calendar"></div>
+            </div>
+            <div class="step__nav">
+              <button type="button" class="btn btn--secondary btn--sm" data-back="2">← Назад</button>
+            </div>
+          </div>
+
+          <!-- ШАГ 4: ВРЕМЯ -->
+          <div class="step" id="step-time">
+            <h3 style="margin-bottom:var(--space-4)">Выберите время</h3>
+            <div class="alert alert--success">Показаны только свободные окна мастера на выбранную дату. Занятые и перерывы не выводятся.</div>
+            <div id="slotList" class="slots"></div>
+            <div class="step__nav">
+              <button type="button" class="btn btn--secondary btn--sm" data-back="3">← Назад</button>
+              <button type="button" class="btn btn--primary btn--md" id="chooseTime" disabled>Выбрать время</button>
+            </div>
+          </div>
+
+          <!-- ШАГ 5: КОНТАКТЫ (только чтение: данные из аккаунта) -->
+          <div class="step" id="step-contacts">
+            <h3 style="margin-bottom:var(--space-4)">Ваши контакты</h3>
+            <div class="panel">
+              <div class="contacts__line">
+                <span class="contacts__label">Запись оформляется на</span>
+                <span class="contacts__value" id="contactName">—</span>
+              </div>
+              <div class="contacts__line">
+                <span class="contacts__label">Телефон</span>
+                <span class="contacts__value" id="contactPhone">—</span>
+              </div>
+              <p class="hint" id="contactPhoneNote" hidden style="margin-bottom:var(--space-4)">
+                Телефон взят из аккаунта при регистрации — здесь API его не отдаёт, поэтому поле показано прочерком.
+              </p>
+              <p class="hint" id="holdNote" style="margin-bottom:var(--space-4)"></p>
+              <button type="button" class="btn btn--primary btn--lg btn--block" id="submitBooking">Подтвердить запись 💖</button>
+              <div class="step__nav">
+                <button type="button" class="btn btn--secondary btn--sm" data-back="4">← Назад</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- СЛOT_CONFLICT: ближайшее свободное время -->
+          <div class="panel" id="conflict" hidden style="margin-top:var(--space-5)">
+            <h3 style="margin-bottom:var(--space-3)">Ближайшее свободное время</h3>
+            <div class="slots" id="conflictSlots"></div>
+          </div>
+        </div>
+
+        <!-- РЕЗЮМЕ -->
+        <aside>
+          <div class="panel panel--tint">
+            <h3 style="margin-bottom:var(--space-4)">Ваша запись</h3>
+            <dl class="summary">
+              <div class="summary__row"><dt>Услуга</dt><dd id="sumService">—</dd></div>
+              <div class="summary__row"><dt>Мастер</dt><dd id="sumMaster">—</dd></div>
+              <div class="summary__row"><dt>Дата и время</dt><dd id="sumWhen">—</dd></div>
+              <div class="summary__divider"></div>
+              <div class="summary__row summary__total"><dt>Итого</dt><dd id="sumPrice">—</dd></div>
+            </dl>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </main>
+
+  <script src="js/api.js"></script>
+  <script src="js/header.js"></script>
+  <script>
+    (function () {
+      var DAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+      var MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля',
+                    'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+      var CAL_DAYS = 14; // календарь на 14 дней (карта экранов, шаг «Дата»)
+      var STEP_IDS = ['step-service', 'step-master', 'step-date', 'step-time', 'step-contacts'];
+      var state = {
+        user: null, services: [], masters: [], workdays: [], phone: null,
+        service: null, master: null, date: null, slot: null, hold: null
+      };
+
+      function $(id) { return document.getElementById(id); }
+
+      // Дата салона 'YYYY-MM-DD' -> объект UTC-полдень (номер дня недели не съезжает)
+      function noon(iso) { return new Date(iso + 'T12:00:00+03:00'); }
+      function addDays(iso, n) {
+        var d = noon(iso);
+        d.setUTCDate(d.getUTCDate() + n);
+        return d.toISOString().slice(0, 10);
+      }
+      function weekdayOf(iso) { return noon(iso).getUTCDay(); }
+      function monthOf(iso) { return MONTHS[noon(iso).getUTCMonth()]; }
+      function prettyDate(iso) {
+        var p = iso.split('-');
+        return p[2] + '.' + p[1] + '.' + p[0] + ', ' + DAYS[weekdayOf(iso)];
+      }
+      // UTC ISO слота -> календарный день салона 'YYYY-MM-DD'
+      function slotDate(iso) {
+        return new Date(new Date(iso).getTime() + 180 * 60000).toISOString().slice(0, 10);
+      }
+
+      function goStep(n) {
+        STEP_IDS.forEach(function (id, i) {
+          var el = $(id);
+          if (el) el.classList.toggle('is-visible', i === n - 1);
+          var st = document.querySelector('.stepper__step[data-step="' + (i + 1) + '"]');
+          if (st) {
+            st.classList.toggle('is-active', i + 1 === n);
+            st.classList.toggle('is-done', i + 1 < n);
+          }
+        });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+
+      function renderSummary() {
+        $('sumService').textContent = state.service ? state.service.name : '—';
+        $('sumMaster').textContent = state.master ? state.master.name : '—';
+        $('sumWhen').textContent = state.slot ? window.api.fmt(state.slot.starts_at)
+          : (state.date ? prettyDate(state.date) : '—');
+        $('sumPrice').textContent = state.service ? window.api.rub(state.service.price_kopecks) : '—';
+      }
+
+      // ШАГ 1 — услуги
+      function renderServices() {
+        $('serviceList').innerHTML = state.services.map(function (s) {
+          var sel = state.service && state.service.id === s.id;
+          return '<button type="button" class="option' + (sel ? ' is-selected' : '') + '" data-service="' + s.id + '">' +
+            '<span>' +
+              '<span class="option__title">' + window.api.esc(s.name) + '</span><br>' +
+              '<span class="option__meta">' + window.api.esc(s.description || '') + ' · ' + s.duration_minutes + ' мин</span>' +
+            '</span>' +
+            '<span class="option__price">' + window.api.rub(s.price_kopecks) + '</span>' +
+          '</button>';
+        }).join('');
+      }
+
+      // ШАГ 2 — только мастера, умеющие выбранную услугу
+      function renderMasters() {
+        var host = $('masterList');
+        if (!state.service) { host.innerHTML = ''; return; }
+        var list = state.masters.filter(function (m) {
+          return (m.services || []).some(function (s) { return s.id === state.service.id; });
+        });
+        if (!list.length) {
+          host.innerHTML = '<p class="stub">На эту услугу мастеров пока нет — выберите другую.</p>';
+          return;
+        }
+        host.innerHTML = list.map(function (m) {
+          var sel = state.master && state.master.id === m.id;
+          var initial = window.api.esc((m.name || '?').trim().charAt(0).toUpperCase());
+          var avatar = m.photo_path
+            ? '<img class="option__avatar" src="' + window.api.esc(m.photo_path) + '" alt="' + window.api.esc(m.name) + '">'
+            : '<span class="option__avatar">' + initial + '</span>';
+          var meta = window.api.esc(m.role || '') +
+            (m.experience_years ? ' · в профессии ' + m.experience_years + ' лет' : '');
+          return '<button type="button" class="option' + (sel ? ' is-selected' : '') + '" data-master="' + m.id + '">' +
+            avatar +
+            '<span>' +
+              '<span class="option__title">' + window.api.esc(m.name) + '</span><br>' +
+              '<span class="option__meta">' + meta + '</span>' +
+            '</span>' +
+          '</button>';
+        }).join('');
+      }
+
+      // ШАГ 3 — календарь: 14 дней, рабочие дни студии, прошедшие выключены
+      function renderCalendar() {
+        var today = window.api.todaySalon();
+        var last = addDays(today, CAL_DAYS - 1);
+        $('calendarMonth').textContent = monthOf(today) === monthOf(last)
+          ? monthOf(today)
+          : monthOf(today) + ' — ' + monthOf(last);
+
+        var html = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс']
+          .map(function (d) { return '<div class="calendar__wd">' + d + '</div>'; }).join('');
+
+        for (var i = 0; i < (weekdayOf(today) + 6) % 7; i++) html += '<div></div>';
+
+        for (var k = 0; k < CAL_DAYS; k++) {
+          var iso = addDays(today, k);
+          var wd = weekdayOf(iso);
+          var work = state.workdays.length === 0 || state.workdays.indexOf(wd) !== -1;
+          var off = !work; // прошедшие дни в календарь не попадают: начинаем с сегодня
+          html += '<button type="button" class="day' + (state.date === iso ? ' is-selected' : '') + '"' +
+            (off ? ' disabled' : '') + ' data-date="' + iso + '">' +
+            '<span class="day__num">' + Number(iso.split('-')[2]) + '</span>' +
+            '<span class="day__wd">' + DAYS[wd] + '</span>' +
+          '</button>';
+        }
+        $('calendar').innerHTML = html;
+      }
+
+      // ШАГ 4 — свободные слоты
+      function loadSlots() {
+        var host = $('slotList');
+        $('chooseTime').disabled = true;
+        host.innerHTML = '<div class="skeleton skel-row"></div><div class="skeleton skel-row"></div><div class="skeleton skel-row"></div>';
+        window.api.request('/api/masters/' + state.master.id + '/slots?date=' + state.date +
+                           '&service_ids=' + state.service.id + '&step_minutes=60')
+          .then(function (d) {
+            if (!d.slots.length) {
+              host.innerHTML = '<p class="stub">На эту дату свободных окон нет. Выберите другую дату.</p>';
+              return;
+            }
+            host.innerHTML = d.slots.map(function (s) {
+              var sel = state.slot && state.slot.starts_at === s.starts_at;
+              return '<button type="button" class="slot' + (sel ? ' is-selected' : '') + '" data-slot="' +
+                window.api.esc(s.starts_at) + '">' + window.api.hour(s.starts_at) + '</button>';
+            }).join('');
+          })
+          .catch(function () {
+            host.innerHTML = '<p class="stub">Не удалось загрузить свободное время. Попробуйте позже.</p>';
+          });
+      }
+
+      // ШАГ 5 — контакты только для чтения: из аккаунта
+      function renderContacts() {
+        $('contactName').textContent = state.user.client_name || state.user.username || '—';
+        var hasPhone = !!state.phone;
+        $('contactPhone').textContent = hasPhone ? state.phone : '—';
+        $('contactPhoneNote').hidden = hasPhone;
+      }
+
+      // Конфликт слота: показываем ближайшее свободное время (карта, экран №26)
+      function renderConflict(err) {
+        var info = err && err.data && err.data.error ? err.data.error : null;
+        var list = info && Array.isArray(info.nearest_free) ? info.nearest_free : [];
+        if (!list.length) { $('conflict').hidden = true; return; }
+        $('conflictSlots').innerHTML = list.map(function (s) {
+          return '<button type="button" class="slot" data-slot="' + window.api.esc(s.starts_at) + '">' +
+            window.api.fmt(s.starts_at) + '</button>';
+        }).join('');
+        $('conflictSlots').querySelectorAll('[data-slot]').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            state.date = slotDate(btn.dataset.slot);
+            state.slot = null;
+            state.hold = null;
+            $('conflict').hidden = true;
+            renderCalendar();
+            goStep(4);
+            loadSlots();
+          });
+        });
+        $('conflict').hidden = false;
+      }
+
+      function selectService(id) {
+        state.service = state.services.filter(function (s) { return s.id === id; })[0] || null;
+        state.master = null; state.date = null; state.slot = null; state.hold = null;
+        renderServices();
+        renderMasters();
+        renderSummary();
+        if (state.service) goStep(2);
+      }
+
+      $('serviceList').addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-service]');
+        if (btn) selectService(Number(btn.dataset.service));
+      });
+
+      $('masterList').addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-master]');
+        if (!btn) return;
+        state.master = state.masters.filter(function (m) { return m.id === Number(btn.dataset.master); })[0] || null;
+        state.date = null; state.slot = null; state.hold = null;
+        renderMasters();
+        renderSummary();
+        goStep(3);
+      });
+
+      $('calendar').addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-date]');
+        if (!btn || btn.disabled) return;
+        state.date = btn.dataset.date;
+        state.slot = null; state.hold = null;
+        renderCalendar();
+        renderSummary();
+        goStep(4);
+        loadSlots();
+      });
+
+      $('slotList').addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-slot]');
+        if (!btn) return;
+        state.slot = { starts_at: btn.dataset.slot };
+        $('slotList').querySelectorAll('.slot').forEach(function (b) {
+          b.classList.toggle('is-selected', b === btn);
+        });
+        $('chooseTime').disabled = false;
+        renderSummary();
+      });
+
+      $('chooseTime').addEventListener('click', function () {
+        if (!state.slot) return;
+        window.ui.clear();
+        var btn = $('chooseTime');
+        btn.disabled = true;
+        // Удержание слота на 10 минут — карта экранов, шаг «Время»
+        window.api.request('/api/holds', {
+          method: 'POST',
+          json: { master_id: state.master.id, starts_at: state.slot.starts_at, service_ids: [state.service.id] }
+        }).then(function (d) {
+          state.hold = d;
+          $('holdNote').textContent = 'Слот удерживаем до ' + window.api.hour(d.expires_at) +
+            '. Запись нужно подтвердить за это время.';
+          renderSummary();
+          goStep(5);
+        }).catch(function (err) {
+          btn.disabled = false;
+          state.slot = null;
+          renderConflict(err);
+          loadSlots();
+        });
+      });
+
+      $('submitBooking').addEventListener('click', function () {
+        if (!state.hold) { goStep(4); return; }
+        window.ui.clear();
+        var btn = $('submitBooking');
+        btn.disabled = true;
+        window.api.request('/api/bookings', {
+          method: 'POST',
+          json: {
+            service_id: state.service.id,
+            master_id: state.master.id,
+            starts_at: state.hold.starts_at,
+            hold_token: state.hold.token
+          }
+        }).then(function (d) {
+          window.location.href = 'success.html?booking=' + d.booking.id;
+        }).catch(function (err) {
+          btn.disabled = false;
+          if (err.status === 401) { authLinks(); window.location.href = $('gateLogin').href; return; }
+          // Удержание истекло — слот надо выбрать заново
+          if (err.code === 'HOLD_EXPIRED' || err.code === 'HOLD_NOT_FOUND' || err.code === 'HOLD_INACTIVE') {
+            state.hold = null;
+            state.slot = null;
+            $('holdNote').textContent = '';
+            goStep(4);
+            loadSlots();
+            return;
+          }
+          renderConflict(err);
+        });
+      });
+
+      document.addEventListener('click', function (e) {
+        var back = e.target.closest('[data-back]');
+        if (back) goStep(Number(back.dataset.back));
+      });
+
+      function start() {
+        var deep = new URLSearchParams(window.location.search).get('service');
+
+        window.api.request('/api/studio')
+          .then(function (d) {
+            state.workdays = (d.studio.work_hours || []).map(function (w) { return w.weekday; });
+            renderCalendar();
+          })
+          .catch(function () { renderCalendar(); });
+
+        window.api.request('/api/services')
+          .then(function (d) {
+            state.services = d.services;
+            renderServices();
+            if (deep) {
+              var wanted = state.services.filter(function (s) { return String(s.id) === deep; })[0];
+              if (wanted) selectService(wanted.id);
+            }
+          })
+          .catch(function () {
+            $('serviceList').innerHTML = '<p class="stub">Не удалось загрузить услуги. Попробуйте позже.</p>';
+          });
+
+        window.api.request('/api/masters')
+          .then(function (d) {
+            state.masters = d.masters;
+            renderMasters();
+          });
+
+        // Телефон клиента виден только в его записях — берём оттуда
+        window.api.request('/api/bookings')
+          .then(function (d) {
+            var first = d.bookings && d.bookings[0];
+            state.phone = first && first.client ? first.client.phone : null;
+            renderContacts();
+          })
+          .catch(function () { renderContacts(); });
+
+        goStep(1);
+      }
+
+      // Ссылки входа/регистрации с возвратом на эту страницу (с выбранной
+      // услугой в адресе, если клиент пришёл с лендинга).
+      function authLinks() {
+        var back = encodeURIComponent('booking.html' + window.location.search);
+        $('gateLogin').href = 'login.html?returnTo=' + back;
+        $('gateRegister').href = 'register.html?returnTo=' + back;
+      }
+
+      window.api.me().then(function (user) {
+        if (!user) {
+          authLinks();
+          $('gate').hidden = false;
+          return;
+        }
+        state.user = user;
+        $('flow').hidden = false;
+        renderContacts();
+        start();
+      });
+    })();
+  </script>
+</body>
+</html>

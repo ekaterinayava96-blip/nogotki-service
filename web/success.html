@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Запись создана — Ноготочки</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="tokens.css" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+
+  <div id="global-header"></div>
+
+  <main class="container" style="padding-top:var(--space-6); max-width:720px">
+    <div id="error" class="alert alert--error" hidden></div>
+    <div id="loading"><div class="skeleton skel-card"></div></div>
+
+    <div id="content" hidden>
+      <div class="panel" style="text-align:center; margin-bottom:var(--space-5)">
+        <div class="panel__icon">💖</div>
+        <h1 style="margin-bottom:var(--space-3)">Запись создана</h1>
+        <p style="color:var(--color-text-muted)">
+          Статус: <span class="badge badge--wait" id="stStatus">ждём подтверждения</span><br />
+          Мастер подтвердит визит и напомнит о нём за сутки.
+        </p>
+      </div>
+
+      <div class="panel panel--tint" style="margin-bottom:var(--space-5)">
+        <h3 style="margin-bottom:var(--space-4)">Детали записи</h3>
+        <dl class="summary">
+          <div class="summary__row"><dt>Услуга</dt><dd id="sumService">—</dd></div>
+          <div class="summary__row"><dt>Мастер</dt><dd id="sumMaster">—</dd></div>
+          <div class="summary__row"><dt>Дата и время</dt><dd id="sumWhen">—</dd></div>
+          <div class="summary__row"><dt>Контакт</dt><dd id="sumContact">—</dd></div>
+          <div class="summary__divider"></div>
+          <div class="summary__row summary__total"><dt>К оплате</dt><dd id="sumPrice">—</dd></div>
+        </dl>
+      </div>
+
+      <div class="panel" style="margin-bottom:var(--space-5)">
+        <h3 style="margin-bottom:var(--space-4)">Контакты студии</h3>
+        <div class="contacts__line">
+          <span class="contacts__label">Адрес</span><span class="contacts__value" id="stAddress">—</span>
+        </div>
+        <div class="contacts__line">
+          <span class="contacts__label">Телефон</span><span class="contacts__value" id="stPhone">—</span>
+        </div>
+        <div class="contacts__line">
+          <span class="contacts__label">Telegram</span><span class="contacts__value" id="stTelegram">—</span>
+        </div>
+      </div>
+
+      <p style="text-align:center">
+        <a class="btn btn--primary btn--md" href="appointments.html">Мои записи</a>
+        <a class="btn btn--ghost btn--md" href="index.html">На главную</a>
+      </p>
+    </div>
+
+    <div id="missing" class="empty-state" hidden>
+      <p>Запись не найдена. Возможно, ссылка устарела — посмотрите свои записи в кабинете.</p>
+      <a class="btn btn--primary btn--md" href="appointments.html">Мои записи</a>
+      <a class="btn btn--ghost btn--md" href="index.html">На главную</a>
+    </div>
+  </main>
+
+  <script src="js/api.js"></script>
+  <script src="js/header.js"></script>
+  <script>
+    (function () {
+      function $(id) { return document.getElementById(id); }
+
+      function showMissing() {
+        $('loading').hidden = true;
+        $('content').hidden = true;
+        $('missing').hidden = false;
+      }
+
+      function renderStudio(st) {
+        if (!st) return;
+        $('stAddress').textContent = st.address || '—';
+        $('stPhone').textContent = st.phone || '—';
+        $('stTelegram').textContent = st.telegram || '—';
+      }
+
+      // Адрес записи в URL: success.html?booking=<id> (карта экранов, №11)
+      var id = new URLSearchParams(window.location.search).get('booking');
+      if (!id) {
+        showMissing();
+      } else {
+        window.api.request('/api/bookings/' + encodeURIComponent(id))
+          .then(function (d) {
+            var b = d.booking;
+            $('loading').hidden = true;
+            $('content').hidden = false;
+            $('stStatus').textContent = window.BOOKING_STATUS[b.status] || b.status;
+            $('stStatus').className = 'badge badge--' + (b.status === 'confirmed' ? 'confirmed' : 'wait');
+            $('sumService').textContent = b.service.name;
+            $('sumMaster').textContent = b.master.name;
+            $('sumWhen').textContent = window.api.fmt(b.starts_at);
+            $('sumContact').textContent = b.client.name + (b.client.phone ? ', ' + b.client.phone : '');
+            $('sumPrice').textContent = window.api.rub(b.service.price_kopecks);
+          })
+          .catch(function (err) {
+            if (err.status === 404) { showMissing(); return; }
+            showMissing();
+          });
+
+        window.api.request('/api/studio')
+          .then(function (d) { renderStudio(d.studio); })
+          .catch(function () { renderStudio(null); });
+      }
+    })();
+  </script>
+</body>
+</html>

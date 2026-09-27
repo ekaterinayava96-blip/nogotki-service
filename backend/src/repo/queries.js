@@ -395,10 +395,10 @@ function setBookingStatus(id, status) {
   ).run(status, nowDbLocal(), Number(id));
 }
 
-function moveBooking(id, startsAtLocal, endsAtLocal) {
+function moveBooking(id, startsAtLocal, endsAtLocal, masterId = null) {
   db.prepare(
-    'UPDATE bookings SET starts_at = ?, ends_at = ?, updated_at = ? WHERE id = ?'
-  ).run(startsAtLocal, endsAtLocal, nowDbLocal(), Number(id));
+    'UPDATE bookings SET starts_at = ?, ends_at = ?, master_id = COALESCE(?, master_id), updated_at = ? WHERE id = ?'
+  ).run(startsAtLocal, endsAtLocal, masterId ? Number(masterId) : null, nowDbLocal(), Number(id));
 }
 
 // Деталь для отдачи наружу: без паролей, суммы в копейках, время в UTC.
