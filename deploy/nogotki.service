@@ -1,0 +1,60 @@
+# systemd-юнит боевого сервиса «Ноготочки».
+#
+# Установка (под пользователем с правами sudo):
+#   sudo useradd --system --home /opt/nogotki --shell /usr/sbin/nologin nogotki
+#   sudo cp deploy/nogotki.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now nogotki
+#
+# Настройки приходят из /etc/nogotki/nogotki.env — файл создаётся из
+# deploy/nogotki.env.example и НЕ лежит в репозитории (там секреты).
+
+[Unit]
+Description=Ноготочки — API записи и веб-фронтенд студии
+Documentation=file:/opt/nogotki/docs/deploy.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nogotki
+Group=nogotki
+WorkingDirectory=/opt/nogotki/backend
+EnvironmentFile=/etc/nogotki/nogotki.env
+ExecStart=/usr/bin/node src/index.js
+
+# Упал по любой причине (OOM, случайный сбой) — поднять обратно.
+# start-limit не даёт превратить опечатку в config в бесконечный цикл перезапусков.
+Restart=always
+RestartSec=5
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+# Порт и режим приходят из nogotki.env (PORT, NODE_ENV, DB_PATH).
+# Порт наружу не открываем: его закрывает брандмауэр (ufw), см. docs/deploy.md.
+
+# --- Ужесточение прав ---
+# Приложению нужны только файлы проекта (чтение) и папка с базой (запись).
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+ReadWritePaths=/opt/nogotki/backend/data
+LockPersonality=true
+MemoryDenyWriteExecute=false
+
+# Разумные лимиты: процессу хватает единиц мегабайт, а не гигабайтов.
+LimitNOFILE=8192
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nogotki
+
+[Install]
+WantedBy=multi-user.target
