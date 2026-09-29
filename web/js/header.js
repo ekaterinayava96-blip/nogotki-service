@@ -16,14 +16,18 @@
   if (!host) return;
 
   function render(user) {
-    // «Мои записи» — кабинет клиента. Владельцу и мастеру эта ссылка не
-    // нужна: у них нет профиля клиента, и страница не покажет им ничего
-    // осмысленного (у владельца API отдаёт по ней все записи студии).
+    // «Мои записи» — кабинет клиента, «Панель владельца» — /api/admin/*, и обе
+    // ссылки зависят от роли: клиенту показываем только кабинет, владельцу —
+    // панель (его кабинет закрыт, иначе он видел бы чужие записи как свои).
+    var roles = user && Array.isArray(user.roles) ? user.roles : [];
     var links =
       '<a href="catalog.html">Услуги и цены</a>' +
       '<a href="index.html#about">О студии</a>';
-    if (user && Array.isArray(user.roles) && user.roles.indexOf('client') !== -1) {
+    if (roles.indexOf('client') !== -1) {
       links += '<a href="appointments.html">Мои записи</a>';
+    }
+    if (roles.indexOf('owner') !== -1) {
+      links += '<a href="admin.html">Панель владельца</a>';
     }
 
     var auth;

@@ -618,6 +618,54 @@ body.is-modal-open { overflow: hidden; }
 }
 .booking-detail__back { display: inline-block; margin-bottom: var(--space-4); }
 
+/* ---------- ПАНЕЛЬ ВЛАДЕЛЬЦА (admin.html) ---------- */
+.adm-stats {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-4); margin-bottom: var(--space-6);
+}
+.adm-stat {
+  display: flex; flex-direction: column; gap: var(--space-2);
+  padding: var(--space-5);
+  background: var(--color-bg-surface);
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+.adm-stat__value { font-size: var(--font-size-h3); font-weight: 800; color: var(--color-text-heading); }
+.adm-stat__label { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+
+.adm-filters {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  gap: var(--space-4); align-items: end; margin-bottom: var(--space-5);
+}
+.adm-filters .field { margin-bottom: 0; }
+.adm-filters select {
+  padding: 13px var(--space-4); border-radius: var(--radius-md);
+  border: 1.5px solid var(--color-border-strong); background: var(--color-bg-surface);
+  font-family: var(--font-family-body); font-size: var(--font-size-body); color: var(--color-text-primary);
+}
+.adm-filters select:focus { outline: none; border-color: var(--color-button-primary); box-shadow: 0 0 0 3px var(--color-border); }
+.adm-filters__actions { display: flex; align-items: flex-end; }
+
+.adm-loading { margin-bottom: var(--space-5); }
+.adm-table-wrap { overflow-x: auto; padding: var(--space-2); }
+.adm-table { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); }
+.adm-table th {
+  text-align: left; padding: var(--space-3);
+  font-size: var(--font-size-caption); text-transform: uppercase; letter-spacing: .04em;
+  color: var(--color-text-muted); border-bottom: 1.5px solid var(--color-border); white-space: nowrap;
+}
+.adm-table td { padding: var(--space-3); border-bottom: 1px solid var(--color-border); vertical-align: top; }
+.adm-table tr:last-child td { border-bottom: none; }
+.adm-when { white-space: nowrap; }
+.adm-sub { display: block; color: var(--color-text-muted); font-size: var(--font-size-caption); }
+.adm-actions { white-space: nowrap; }
+.adm-actions .btn { margin-right: var(--space-2); }
+
+.adm-settings { display: flex; gap: var(--space-4); align-items: flex-end; }
+.adm-settings .field { margin-bottom: 0; }
+.adm-settings .field:first-child { max-width: 260px; }
+.adm-settings__save { padding-bottom: 2px; }
+
 /* ---------- АДАПТИВ ---------- */
 @media (max-width: 767px) {
   .nav__links { display: none; }
@@ -630,4 +678,10 @@ body.is-modal-open { overflow: hidden; }
   .tabs__tab { flex: 1; justify-content: center; }
   .booking-card__actions .btn, .booking-detail__actions .btn { flex: 1; }
   .modal__actions .btn { flex: 1; }
+  .adm-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .adm-filters { grid-template-columns: minmax(0, 1fr); }
+  .adm-filters__actions .btn { width: 100%; }
+  .adm-settings { flex-direction: column; align-items: stretch; }
+  .adm-settings .field:first-child { max-width: none; }
+  .adm-settings__save .btn { width: 100%; }
 }

@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Панель владельца — Ноготочки</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="tokens.css" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+
+  <div id="global-header"></div>
+
+  <main class="container">
+    <section style="padding: var(--space-7) 0">
+      <h1>Панель владельца</h1>
+      <p class="hint" id="whoami" style="margin: var(--space-2) 0 var(--space-6); color: var(--color-text-muted)"></p>
+
+      <div id="error" class="alert alert--error" hidden></div>
+      <div id="ok" class="alert alert--success" hidden></div>
+
+      <!-- Дашборд: цифры из GET /api/admin/stats, сумма активных записей
+           считается сервером по booking_services, не на клиенте. -->
+      <div id="stats" class="adm-stats" hidden></div>
+
+      <!-- Фильтры — состояние одной страницы, а не отдельные экраны:
+           GET /api/admin/bookings собирается заново на каждое изменение. -->
+      <div class="panel adm-filters" id="filters" hidden>
+        <div class="field">
+          <label for="fStatus">Статус</label>
+          <select id="fStatus">
+            <option value="">Все</option>
+            <option value="wait">Ожидает</option>
+            <option value="confirmed">Подтверждена</option>
+            <option value="done">Выполнена</option>
+            <option value="canceled">Отменена</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="fMaster">Мастер</label>
+          <select id="fMaster">
+            <option value="">Все мастера</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="fFrom">Дата с</label>
+          <input type="date" id="fFrom" />
+        </div>
+        <div class="field">
+          <label for="fTo">Дата по</label>
+          <input type="date" id="fTo" />
+        </div>
+        <div class="field adm-filters__actions">
+          <button type="button" class="btn btn--secondary btn--md" id="fReset">Сбросить</button>
+        </div>
+      </div>
+
+      <div id="loading" class="adm-loading">
+        <div class="skeleton skel-row"></div>
+        <div class="skeleton skel-row" style="margin-top: var(--space-3)"></div>
+        <div class="skeleton skel-row" style="margin-top: var(--space-3)"></div>
+      </div>
+
+      <div class="panel adm-table-wrap" id="tableWrap" hidden>
+        <table class="adm-table">
+          <thead>
+            <tr>
+              <th>Дата и время</th>
+              <th>Клиент</th>
+              <th>Услуги</th>
+              <th>Мастер</th>
+              <th>Сумма</th>
+              <th>Статус</th>
+              <th>Действия</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+
+      <div id="empty" class="empty-state" hidden>
+        <p id="emptyText">Записей нет — попробуйте изменить фильтры</p>
+        <a class="btn btn--primary btn--md" href="index.html">На главную</a>
+      </div>
+
+      <!-- Правило бесплатной отмены видит клиент в кабинете и в правилах
+           записи, поэтому меняется здесь, а не в коде. -->
+      <div class="panel" id="settings" hidden style="margin-top: var(--space-6)">
+        <h2 style="margin-bottom: var(--space-2); font-size: var(--font-size-h3)">Правила записи</h2>
+        <p class="hint" style="margin-bottom: var(--space-4)">
+          Бесплатная отмена — за сколько часов до визита клиент может отменить запись без потери предоплаты.
+          0 — отмена в любой момент считается поздней.
+        </p>
+        <form id="settingsForm" class="adm-settings">
+          <div class="field">
+            <label for="cancelHours">Бесплатная отмена, часов</label>
+            <input type="number" id="cancelHours" min="0" max="168" step="1" />
+            <p class="hint">От 0 до 168 часов (неделя).</p>
+          </div>
+          <div class="field adm-settings__save">
+            <button type="submit" class="btn btn--primary btn--md">Сохранить</button>
+          </div>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <script src="js/api.js"></script>
+  <script src="js/header.js"></script>
+  <script>
+    (function () {
+      var rows = document.getElementById('rows');
+      var loading = document.getElementById('loading');
+      var tableWrap = document.getElementById('tableWrap');
+      var empty = document.getElementById('empty');
+      var emptyText = document.getElementById('emptyText');
+      var statsBox = document.getElementById('stats');
+      var filters = document.getElementById('filters');
+      var settings = document.getElementById('settings');
+      var cancelHours = document.getElementById('cancelHours');
+
+      var state = { bookings: [], masters: [], loaded: false, busyId: null };
+
+      // Смена статуса доступна только вперёд по lifecycle: подтвердить
+      // ожидание, закрыть визит, отменить. Возврат из «выполнена» в
+      // «подтверждена» — ошибка владельца, а не штатная операция.
+      var NEXT_STATUS = {
+        wait: [{ to: 'confirmed', label: 'Подтвердить', cls: 'btn--primary' },
+               { to: 'canceled', label: 'Отменить', cls: 'btn--ghost' }],
+        confirmed: [{ to: 'done', label: 'Выполнена', cls: 'btn--secondary' },
+                    { to: 'canceled', label: 'Отменить', cls: 'btn--ghost' }],
+        done: [],
+        canceled: []
+      };
+
+      // Дата фильтра «YYYY-MM-DD» -> момент начала суток салона в UTC ISO.
+      // Правая граница в API исключающая (starts_at < to), поэтому день
+      // «по» отправляем как начало СЛЕДУЮЩИХ суток, иначе 1 октября пропала бы.
+      function dayStartIso(day) { return day + 'T00:00:00+03:00'; }
+      function nextDayIso(day) {
+        // Считаем по календарной дате, а не по UTC: салон живёт на +03:00, и
+        // прибавление суток к «2026-10-01T00:00:00+03:00» в UTC съело бы день
+        // назад (локальная полночь — это 21:00 предыдущих суток по UTC).
+        var p = day.split('-');
+        var next = new Date(Date.UTC(Number(p[0]), Number(p[1]) - 1, Number(p[2]) + 1));
+        return next.toISOString().slice(0, 10) + 'T00:00:00+03:00';
+      }
+
+      function query() {
+        var p = [];
+        var status = document.getElementById('fStatus').value;
+        var masterId = document.getElementById('fMaster').value;
+        var from = document.getElementById('fFrom').value;
+        var to = document.getElementById('fTo').value;
+        if (status) p.push('status=' + encodeURIComponent(status));
+        if (masterId) p.push('master_id=' + encodeURIComponent(masterId));
+        if (from) p.push('from=' + encodeURIComponent(dayStartIso(from)));
+        if (to) p.push('to=' + encodeURIComponent(nextDayIso(to)));
+        return p.length ? '?' + p.join('&') : '';
+      }
+
+      function statTile(label, value) {
+        return '<div class="adm-stat"><span class="adm-stat__value">' + window.api.esc(value) +
+          '</span><span class="adm-stat__label">' + window.api.esc(label) + '</span></div>';
+      }
+
+      function renderStats(s) {
+        statsBox.innerHTML =
+          statTile('Всего записей', s.total_bookings) +
+          statTile('Активных', s.active_bookings) +
+          statTile('Сумма активных', window.api.rub(s.active_sum_kopecks)) +
+          statTile('Мастеров', s.masters_count);
+        statsBox.hidden = false;
+      }
+
+      function cell(text, cls) {
+        return '<td' + (cls ? ' class="' + cls + '"' : '') + '>' + text + '</td>';
+      }
+
+      function renderRow(b) {
+        var services = window.api.servicesOf(b);
+        var when = '<strong>' + window.api.fmt(b.starts_at) + '</strong>' +
+          '<span class="adm-sub">' + window.api.hour(b.ends_at) + ' · ' +
+          window.api.duration(services.minutes) + '</span>';
+        var client = '<strong>' + window.api.esc(b.client.name) + '</strong>' +
+          '<span class="adm-sub">' + window.api.esc(b.client.phone || '—') + '</span>';
+        var list = '<span class="adm-sub">' + window.api.esc(services.names) + '</span>';
+        var badge = '<span class="badge badge--' + window.api.esc(b.status) + '">' +
+          window.api.esc(window.BOOKING_STATUS[b.status] || b.status) + '</span>';
+
+        var actions = (NEXT_STATUS[b.status] || []).map(function (a) {
+          return '<button type="button" class="btn btn--sm ' + a.cls + '" data-booking="' + b.id +
+            '" data-status="' + a.to + '"' + (state.busyId === b.id ? ' disabled' : '') + '>' +
+            window.api.esc(a.label) + '</button>';
+        }).join(' ');
+
+        return '<tr>' + cell(when, 'adm-when') + cell(client) + cell(list) +
+          cell(window.api.esc(b.master.name)) + cell(window.api.rub(services.price)) +
+          cell(badge) + cell(actions || '<span class="adm-sub">—</span>', 'adm-actions') + '</tr>';
+      }
+
+      function render() {
+        var has = state.bookings.length > 0;
+        tableWrap.hidden = !has;
+        empty.hidden = has;
+        if (has) {
+          rows.innerHTML = state.bookings.map(renderRow).join('');
+        } else {
+          rows.innerHTML = '';
+          // Пустой список и неудачная загрузка — разные состояния: в первом
+          // случае визиты есть, их просто не подошёл фильтр, во втором
+          // клиент ещё ничего не видел и «смените фильтры» его сбило бы.
+          emptyText.textContent = state.loaded
+            ? 'Под фильтры ничего не нашлось — смените условия или сбросьте их'
+            : 'Записи не загрузились — обновите страницу или попробуйте позже';
+        }
+      }
+
+      function loadBookings() {
+        loading.hidden = false;
+        tableWrap.hidden = true;
+        empty.hidden = true;
+        return window.api.request('/api/admin/bookings' + query()).then(function (r) {
+          state.bookings = r.bookings || [];
+          state.loaded = true;
+          loading.hidden = true;
+          render();
+        }).catch(function (err) {
+          loading.hidden = true;
+          if (err.status === 401) { window.location.replace('login.html?returnTo=admin.html'); return; }
+          if (err.status === 403) { renderForbidden(err.message); return; }
+          render();
+        });
+      }
+
+      function loadMasters() {
+        return window.api.request('/api/admin/masters').then(function (r) {
+          state.masters = r.masters || [];
+          var sel = document.getElementById('fMaster');
+          sel.innerHTML = '<option value="">Все мастера</option>' + state.masters.map(function (m) {
+            return '<option value="' + m.id + '">' + window.api.esc(m.name) + '</option>';
+          }).join('');
+        });
+      }
+
+      function loadStats() {
+        return window.api.request('/api/admin/stats').then(renderStats);
+      }
+
+      function loadSettings() {
+        return window.api.request('/api/admin/studio').then(function (r) {
+          cancelHours.value = Number(r.studio.free_cancel_hours);
+          settings.hidden = false;
+        });
+      }
+
+      // Владелец закрывает запись руками: PATCH меняет статус и возвращает
+      // запись — список и цифры перечитываем, чтобы на экране не осталось
+      // старой строки из памяти.
+      function setStatus(id, status) {
+        state.busyId = id;
+        render();
+        return window.api.request('/api/admin/bookings/' + id, {
+          method: 'PATCH', json: { status: status }
+        }).then(function (r) {
+          var b = r.booking;
+          window.ui.ok('Запись №' + b.id + ': ' + window.BOOKING_STATUS[b.status].toLowerCase() + '.');
+          return Promise.all([loadBookings(), loadStats()]);
+        }).catch(function (err) {
+          if (err.status === 403) { renderForbidden(err.message); return; }
+          return loadBookings();
+        }).then(function () { state.busyId = null; render(); });
+      }
+
+      // Страница и её эндпоинты только для owner. Роль проверяем до запросов,
+      // чтобы клиент или мастер не увидели «Панель владельца» с чужой ошибкой.
+      function renderForbidden(msg) {
+        loading.hidden = true;
+        filters.hidden = true;
+        settings.hidden = true;
+        statsBox.hidden = true;
+        tableWrap.hidden = true;
+        empty.hidden = true;
+        var el = document.getElementById('error');
+        el.className = 'alert';
+        el.textContent = msg || 'Панель владельца доступна только владельцу студии.';
+        el.hidden = false;
+      }
+
+      function bindEvents() {
+        ['fStatus', 'fMaster', 'fFrom', 'fTo'].forEach(function (id) {
+          document.getElementById(id).addEventListener('change', function () {
+            window.ui.clear();
+            loadBookings();
+          });
+        });
+        document.getElementById('fReset').addEventListener('click', function () {
+          document.getElementById('fStatus').value = '';
+          document.getElementById('fMaster').value = '';
+          document.getElementById('fFrom').value = '';
+          document.getElementById('fTo').value = '';
+          window.ui.clear();
+          loadBookings();
+        });
+
+        rows.addEventListener('click', function (ev) {
+          var btn = ev.target.closest('button[data-booking]');
+          if (!btn || btn.disabled) return;
+          setStatus(Number(btn.dataset.booking), btn.dataset.status);
+        });
+
+        document.getElementById('settingsForm').addEventListener('submit', function (ev) {
+          ev.preventDefault();
+          var hours = Number(cancelHours.value);
+          if (!Number.isInteger(hours) || hours < 0 || hours > 168) {
+            window.ui.error('Укажите целое число часов от 0 до 168.');
+            return;
+          }
+          window.api.request('/api/admin/studio', { method: 'PATCH', json: { free_cancel_hours: hours } })
+            .then(function (r) {
+              cancelHours.value = Number(r.studio.free_cancel_hours);
+              window.ui.ok('Правило сохранено: бесплатная отмена за ' + r.studio.free_cancel_hours + ' ч.');
+            });
+        });
+      }
+
+      window.api.me().then(function (user) {
+        if (!user) { window.location.replace('login.html?returnTo=admin.html'); return; }
+        var roles = Array.isArray(user.roles) ? user.roles : [];
+        var who = document.getElementById('whoami');
+        if (roles.indexOf('owner') === -1) {
+          renderForbidden('Панель владельца доступна только владельцу студии.');
+          return;
+        }
+        if (who) who.textContent = 'Записи всей студии: ' + (user.username || '') +
+          '. Смена статуса, фильтры и правило бесплатной отмены.';
+        bindEvents();
+        filters.hidden = false;
+        // Текст ошибки каждого запроса уже показывает window.ui.error, поэтому
+        // в Promise.all ветки глотаем: иначе необработанный reject просто
+        // засоряет консоль, а экран уже показал, что именно не пришло.
+        var quietly = function (p) { return p.catch(function () {}); };
+        Promise.all([loadMasters(), loadStats(), loadSettings(), loadBookings()].map(quietly));
+      });
+    })();
+  </script>
+</body>
+</html>
