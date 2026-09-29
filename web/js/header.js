@@ -53,12 +53,42 @@
         '<div class="container nav__inner">' +
           '<a class="brand" href="index.html"><span class="brand__dot" aria-hidden="true"></span>Ноготочки</a>' +
           '<div class="nav__cluster">' +
-            '<nav class="nav__links" aria-label="Основная навигация">' + links + '</nav>' +
-            '<a class="btn btn--primary btn--sm" href="booking.html">Записаться</a>' +
-            auth +
+            // Кнопка нужна только на узком экране: в app.css .nav__toggle скрыта
+            // на широком, а на телефоне .nav__menu раскрывается под шапкой
+            '<button type="button" class="nav__toggle" aria-expanded="false" ' +
+              'aria-controls="navMenu" aria-label="Меню" title="Меню">☰</button>' +
+            '<div class="nav__menu" id="navMenu">' +
+              '<nav class="nav__links" aria-label="Основная навигация">' + links + '</nav>' +
+              '<a class="btn btn--primary btn--sm" href="booking.html">Записаться</a>' +
+            '</div>' +
           '</div>' +
+          auth +
         '</div>' +
       '</header>';
+
+    // Меню на телефоне: раскрывается по кнопке и закрывается, когда клиент
+    // ушёл по ссылке. Ссылки не прячутся — они просто свёрнуты.
+    var toggle = host.querySelector('.nav__toggle');
+    var menu = host.querySelector('.nav__menu');
+    function setMenu(open) {
+      menu.classList.toggle('is-open', open);
+      toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+    toggle.addEventListener('click', function () {
+      setMenu(!menu.classList.contains('is-open'));
+    });
+    // Ушли по ссылке, нажали вне меню или нажали Escape — панель закрывается
+    menu.addEventListener('click', function (e) {
+      if (e.target.closest('a')) setMenu(false);
+    });
+    document.addEventListener('click', function (e) {
+      if (!menu.classList.contains('is-open')) return;
+      if (e.target.closest('.nav__menu') || e.target.closest('.nav__toggle')) return;
+      setMenu(false);
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && menu.classList.contains('is-open')) setMenu(false);
+    });
 
     var out = host.querySelector('[data-logout]');
     if (out) out.addEventListener('click', function () { window.api.logout(); });

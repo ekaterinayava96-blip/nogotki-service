@@ -106,10 +106,13 @@
     el.innerHTML =
       '<div class="modal">' +
         '<h3 id="cancelModalTitle"></h3>' +
-        '<div id="cancelModalBody"></div>' +
+        // Класс .modal__body нужен узкому экрану: текст правила прокручивается
+        // внутри окна, а кнопки остаются на виду
+        '<div class="modal__body" id="cancelModalBody"></div>' +
         '<div class="modal__actions">' +
           '<button type="button" class="btn btn--ghost btn--md" id="cancelKeep">Не отменять</button>' +
-          '<button type="button" class="btn btn--primary btn--md" id="cancelConfirm">Отменить запись</button>' +
+          '<button type="button" class="btn btn--primary btn--md" id="cancelConfirm" ' +
+            'data-idle-label="Отменить запись">Отменить запись</button>' +
         '</div>' +
       '</div>';
     document.body.appendChild(el);
@@ -151,27 +154,36 @@
       el.onclick = function (e) { if (e.target === el) close(); };
       document.addEventListener('keydown', onKey);
 
+      // Отмена уходит только когда клиент нажал «Отменить запись». Пока он
+      // читает правило и жмёт «Не отменять» (или закрывает окно), запись
+      // остаётся активной: окно спрашивает, а не решает за него.
       var btn = el.querySelector('#cancelConfirm');
-      // Повторное нажатие во время запроса не должно слать второй POST.
-      btn.disabled = true;
-      btn.textContent = 'Отменяем…';
-      window.api
-        .request('/api/bookings/' + encodeURIComponent(booking.id) + '/cancel', { method: 'POST' })
-        .then(function (d) {
-          close();
-          if (handlers.onDone) handlers.onDone(d.booking);
-        })
-        .catch(function (err) {
-          close();
-          // 400/409 — запись уже не активна: это не ошибка сети, а изменение
-          // состояния, поэтому показываем свой текст, а не серверный 400.
-          if (err.status === 400 || err.status === 404 || err.status === 409) {
-            window.ui.error('Эту запись уже нельзя отменить — возможно, она отменена или прошла.');
+      btn.disabled = false;
+      btn.textContent = btn.dataset.idleLabel;
+      btn.onclick = function () {
+        // Повторное нажатие во время запроса не должно слать второй POST.
+        btn.disabled = true;
+        btn.textContent = 'Отменяем…';
+        window.api
+          .request('/api/bookings/' + encodeURIComponent(booking.id) + '/cancel', { method: 'POST' })
+          .then(function (d) {
+            close();
+            if (handlers.onDone) handlers.onDone(d.booking);
+          })
+          .catch(function (err) {
+            btn.disabled = false;
+            btn.textContent = btn.dataset.idleLabel;
+            close();
+            // 400/409 — запись уже не активна: это не ошибка сети, а изменение
+            // состояния, поэтому показываем свой текст, а не серверный 400.
+            if (err.status === 400 || err.status === 404 || err.status === 409) {
+              window.ui.error('Эту запись уже нельзя отменить — возможно, она отменена или прошла.');
+              if (handlers.onError) handlers.onError(err);
+              return;
+            }
             if (handlers.onError) handlers.onError(err);
-            return;
-          }
-          if (handlers.onError) handlers.onError(err);
-        });
+          });
+      };
     });
   }
 

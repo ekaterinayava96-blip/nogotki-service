@@ -66,7 +66,7 @@ section { padding: var(--space-8) 0; }
 /* Якорные блоки лендинга не прячутся под липкой шапкой при прокрутке меню */
 #services, #masters, #about { scroll-margin-top: calc(var(--space-8) + var(--space-1)); }
 .nav__inner {
-  display: flex; align-items: center; justify-content: space-between;
+  display: flex; align-items: center; justify-content: flex-start;
   gap: var(--space-4);
   min-height: 64px;
 }
@@ -74,6 +74,7 @@ section { padding: var(--space-8) 0; }
   display: inline-flex; align-items: center; gap: var(--space-2);
   font-family: var(--font-family-heading); font-weight: 700; font-size: var(--font-size-h3);
   color: var(--color-text-heading);
+  margin-right: auto; /* прижимает меню и вход к правому краю */
 }
 .brand__dot { width: 12px; height: 12px; border-radius: var(--radius-full);
   background: var(--color-button-primary); }
@@ -82,8 +83,14 @@ section { padding: var(--space-8) 0; }
 .nav__links a:hover { color: var(--color-button-primary); }
 .nav__user { font-size: var(--font-size-sm); color: var(--color-text-muted); }
 
-/* Общая шапка: навигация + авторизация в одном ряду */
+/* Общая шапка: навигация + авторизация в одном ряду.
+   Блок входа — сосед логотипа, а не часть меню: на телефоне он остаётся
+   в строке шапки, когда меню свёрнуто (см. адаптив в конце файла). */
 .nav__cluster { display: flex; align-items: center; gap: var(--space-4); }
+/* Ссылки меню и кнопка «Записаться» лежат в .nav__menu — на широком экране
+   это обычная строка рядом со входом, на узком она раскрывается под шапку. */
+.nav__menu { display: flex; align-items: center; gap: var(--space-4); }
+.nav__toggle { display: none; }
 .nav__auth { display: flex; align-items: center; gap: var(--space-2); }
 .nav__avatar {
   width: var(--space-6); height: var(--space-6);
@@ -666,18 +673,143 @@ body.is-modal-open { overflow: hidden; }
 .adm-settings .field:first-child { max-width: 260px; }
 .adm-settings__save { padding-bottom: 2px; }
 
-/* ---------- АДАПТИВ ---------- */
+/* ---------- АДАПТИВ: УЗКИЙ ЭКРАН (ТЕЛЕФОН) ----------
+   Правило: в этом блоке только то, что на телефоне не помещается, не
+   попадается пальцем или перекрывается. Экраны шириной 768px и больше
+   этот блок не затрагивает — настольная вёрстка остаётся прежней.
+   Ничего не прячем: то, что не влезает в строку, переносится, а то,
+   что не помещается по вертикали, прокручивается. */
 @media (max-width: 767px) {
-  .nav__links { display: none; }
+
+  /* ---------- Общие границы экрана ---------- */
+  .container { padding-left: var(--space-4); padding-right: var(--space-4); }
   section { padding: var(--space-6) 0; }
+  /* Сетка с минимумом 280px не влезала в 320px и уводила страницу вбок */
+  .grid { grid-template-columns: minmax(0, 1fr); }
+  .footer__grid { grid-template-columns: minmax(0, 1fr); }
+  .footer { padding: var(--space-6) 0 var(--space-5); }
+  .hero { padding: var(--space-6) 0 var(--space-5); }
+  .empty-state { padding: var(--space-6) var(--space-4); }
+  .empty-state .btn { display: block; width: 100%; margin: 0 0 var(--space-3); }
+  .master, .panel, .booking-card, .card-service, .calendar { padding: var(--space-4); }
+  /* Формы входа и страницы «готово» не в .container — поля прижимались к краю */
+  .auth-wall, .splash { padding: var(--space-6) var(--space-4); }
+  .splash .btn { display: block; width: 100%; margin: 0 0 var(--space-3); }
+
+  /* ---------- ШАПКА: логотип и вход остаются в строке, меню сворачивается ---------- */
+  .nav__inner {
+    flex-wrap: wrap; min-height: 0; row-gap: var(--space-2);
+    padding-top: var(--space-2); padding-bottom: var(--space-2);
+  }
+  .brand { font-size: var(--font-size-body); min-width: 0; flex: 0 1 auto; margin-right: 0; }
+  .nav__cluster { flex: 0 0 auto; margin-left: auto; }
+  .nav__auth { flex: 0 1 auto; min-width: 0; margin-left: auto; }
+  .nav__toggle {
+    display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+    width: var(--space-7); height: var(--space-7);
+    border: 1.5px solid var(--color-border-strong); border-radius: var(--radius-full);
+    background: var(--color-bg-surface); color: var(--color-button-primary);
+    font: inherit; font-size: var(--font-size-body); font-weight: 800; cursor: pointer;
+  }
+  .nav__toggle[aria-expanded="true"] { background: var(--color-button-primary); color: var(--color-button-primary-text); }
+  /* Меню раскрывается панелью под шапкой. Панель вне потока, поэтому шапка от
+     неё не растёт и не выталкивает логотип со входом на новую строку. */
+  .nav__menu { display: none; }
+  .nav__menu.is-open {
+    display: flex; position: absolute; left: 0; right: 0; top: 100%; z-index: 50;
+    flex-direction: column; align-items: stretch; gap: var(--space-3);
+    max-height: 70vh; overflow-y: auto;
+    padding: var(--space-2) var(--space-4) var(--space-4);
+    background: var(--color-bg-page);
+    border-bottom: 1px solid var(--color-border);
+    box-shadow: var(--shadow-md);
+  }
+  .nav__links { flex-direction: column; align-items: stretch; gap: 0; }
+  .nav__links a { padding: var(--space-3) 0; border-bottom: 1px solid var(--color-border); }
+  .nav__menu .btn--primary { width: 100%; }
+  .nav__auth { flex-wrap: wrap; justify-content: flex-end; }
+  .nav__auth .btn { padding: var(--space-2) var(--space-3); }
+  /* Длинное имя обрезается, а не выталкивает кнопки за край экрана */
+  .nav__user { max-width: 32vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ---------- Запись: сетка в одну колонку, резюме уходит под шаги ---------- */
   .layout--booking { grid-template-columns: minmax(0, 1fr); }
   .layout--booking > aside { position: static; }
-  .step__foot { flex-direction: column; align-items: stretch; }
-  .step__foot-actions { justify-content: space-between; }
+
+  /* ---------- Шаг-индикатор: пять подписей в ряд, наезда нет ---------- */
+  .stepper { flex-wrap: nowrap; justify-content: space-between; gap: var(--space-1); margin-bottom: var(--space-5); }
+  .stepper__connector { display: none; }
+  .stepper__step { flex: 1 1 0; min-width: 0; flex-direction: column; gap: var(--space-1); text-align: center; }
+  .stepper__label { overflow-wrap: anywhere; }
+  .stepper__num { width: var(--space-6); height: var(--space-6); }
+
+  /* ---------- Опции услуг и мастеров: текст переносится, цена не выпадает ---------- */
+  .option { flex-wrap: wrap; }
+  .option__title, .option__meta, .option__note { overflow-wrap: anywhere; }
+  .option__side { margin-left: auto; }
+  .step__nav { flex-wrap: wrap; }
+
+  /* ---------- Экран времени: сетка слотов в две колонки, кнопка под палец ---------- */
+  .slots { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+  .slot { padding: var(--space-4) var(--space-2); font-size: var(--font-size-body); }
+  .slots__legend { gap: var(--space-3); }
+
+  /* Календарь поднят на шаг «Время» (booking.html, узкий экран): сверху
+     месяц, под ним сетка слотов. На широком экраном он остаётся на шаге «Дата». */
+  #timeCalendarBox { margin-bottom: var(--space-4); }
+  .calendar { padding: var(--space-4) var(--space-3); }
+  .calendar__grid { gap: var(--space-1); }
+  /* Квадратный день на телефоне меньше, чем хочется попасть пальцем: растягиваем */
+  .day { aspect-ratio: auto; min-height: var(--space-7); }
+  .calendar__pad { aspect-ratio: auto; min-height: var(--space-7); }
+  .calendar__legend { align-items: flex-start; }
+
+  /* ---------- Панель с итогом и «Далее» остаётся внизу и не закрывает шаг ---------- */
+  .step > .step__foot,
+  #step-time > .step__nav {
+    position: sticky; bottom: 0; z-index: 20;
+    margin: var(--space-4) calc(-1 * var(--space-4)) 0;
+    padding: var(--space-3) var(--space-4);
+    background: var(--color-bg-page);
+    border-top: 1px solid var(--color-border);
+  }
+  .step > .step__foot { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+  .step > .step__foot .step__foot-actions { margin-left: auto; justify-content: flex-end; }
+  .step > .step__foot .btn { flex-shrink: 0; }
+  #step-time > .step__nav { justify-content: space-between; }
+
+  /* ---------- Подтверждение записи и переноса ---------- */
+  .hold { flex-wrap: wrap; gap: var(--space-2) var(--space-4); }
+  .hold__time { margin-left: 0; }
+  #submitBooking { min-height: var(--space-7); }
+  .summary__row { flex-wrap: wrap; }
+  .summary__row dd { min-width: 0; overflow-wrap: anywhere; }
+  .contacts__line { flex-wrap: wrap; }
+  .contacts__value { text-align: left; }
+  #sumPrices dt { max-width: 100%; }
+
+  /* ---------- Карточки записей и истории: те же карточки, но по ширине телефона ---------- */
   .tabs { display: flex; width: 100%; }
-  .tabs__tab { flex: 1; justify-content: center; }
-  .booking-card__actions .btn, .booking-detail__actions .btn { flex: 1; }
+  .tabs__tab { flex: 1; justify-content: center; padding-left: var(--space-3); padding-right: var(--space-3); }
+  .booking-card__head { flex-wrap: wrap; gap: var(--space-2); }
+  .booking-card__date { overflow-wrap: anywhere; }
+  .booking-card__actions { gap: var(--space-2); }
+  .booking-card__actions .btn, .booking-detail__actions .btn { flex: 1 1 auto; }
+
+  /* ---------- Окно подтверждения отмены: по высоте экрана, кнопки всегда видны ---------- */
+  .modal-backdrop { padding: var(--space-4); overflow-y: auto; }
+  .modal {
+    display: flex; flex-direction: column;
+    max-height: calc(100vh - var(--space-6));
+    max-height: calc(100dvh - var(--space-6));
+    padding: var(--space-5);
+  }
+  .modal__body { min-height: 0; overflow-y: auto; }
+  .modal__actions { margin-top: auto; padding-top: var(--space-3); flex-shrink: 0; }
   .modal__actions .btn { flex: 1; }
+  .modal h3 { font-size: var(--font-size-h3); }
+
+  /* ---------- Панель владельца (admin.html) ---------- */
   .adm-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .adm-filters { grid-template-columns: minmax(0, 1fr); }
   .adm-filters__actions .btn { width: 100%; }

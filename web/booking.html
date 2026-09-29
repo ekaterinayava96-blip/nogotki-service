@@ -89,6 +89,9 @@
           <!-- ШАГ 3: ДАТА -->
           <div class="step" id="step-date">
             <h3 style="margin-bottom:var(--space-4)">Выберите дату</h3>
+            <!-- Календарь переносится на шаг «Время» на узком экране, поэтому
+                 он лежит в собственном контейнере (см. placeCalendar). -->
+            <div class="step__calendar" id="calendarBox">
             <div class="calendar">
               <div class="calendar__head">
                 <button type="button" class="calendar__nav" id="monthPrev" aria-label="Предыдущий месяц">←</button>
@@ -101,6 +104,7 @@
                 зачёркнутые дни — занято, выходной или уже прошло
               </p>
             </div>
+            </div>
             <div class="step__nav">
               <button type="button" class="btn btn--secondary btn--sm" data-back="2">← Назад</button>
             </div>
@@ -110,6 +114,9 @@
           <div class="step" id="step-time">
             <h3 style="margin-bottom:var(--space-4)">Выберите время</h3>
             <p class="hint" id="slotsDay"></p>
+            <!-- На узком экране сюда переносится тот же календарь: на телефоне
+                 день и время выбираются рядом, без возврата на шаг назад. -->
+            <div class="step__calendar" id="timeCalendarBox"></div>
             <div id="slotState"></div>
             <div id="slotList" class="slots" hidden></div>
             <p class="slots__legend" id="slotLegend" hidden></p>
@@ -287,6 +294,7 @@
             st.disabled = i + 1 > n; // дальше пройденного — не переходим
           }
         });
+        placeCalendar();
         // Удержание слота живёт ровно на экране подтверждения: вошли — берём
         // слот, вышли — отпускаем, чтобы не держать занятое время, пока
         // клиент ходит по шагам назад.
@@ -295,6 +303,25 @@
         if (n === 5) { if (state.reschedule) renderConfirm(); else enterConfirm(); }
         else if (was === 5) { if (!state.reschedule) leaveConfirm(); }
         window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+
+      // Где лежит календарь. На широком экране он остаётся на шаге «Дата», а на
+      // узком переезжает на шаг «Время»: на телефоне менять день удобнее там же,
+      // где видны окна. Переносится тот же самый элемент — выбранная дата,
+      // состояние дней и обработчики кликов сохраняются.
+      var narrow = window.matchMedia('(max-width: 767px)');
+
+      function placeCalendar() {
+        var cal = $('calendar');
+        var target = (narrow.matches && state.step === 4) ? $('timeCalendarBox') : $('calendarBox');
+        if (cal && target && cal.parentNode !== target) target.appendChild(cal);
+      }
+
+      // Экран повернули или окно сузили — календарь возвращается на своё место
+      if (narrow.addEventListener) {
+        narrow.addEventListener('change', placeCalendar);
+      } else if (narrow.addListener) {
+        narrow.addListener(placeCalendar);
       }
 
       function renderSummary() {
