@@ -16,10 +16,15 @@
   if (!host) return;
 
   function render(user) {
+    // «Мои записи» — кабинет клиента. Владельцу и мастеру эта ссылка не
+    // нужна: у них нет профиля клиента, и страница не покажет им ничего
+    // осмысленного (у владельца API отдаёт по ней все записи студии).
     var links =
       '<a href="catalog.html">Услуги и цены</a>' +
-      '<a href="index.html#about">О студии</a>' +
-      '<a href="appointments.html">Мои записи</a>';
+      '<a href="index.html#about">О студии</a>';
+    if (user && Array.isArray(user.roles) && user.roles.indexOf('client') !== -1) {
+      links += '<a href="appointments.html">Мои записи</a>';
+    }
 
     var auth;
     if (user) {

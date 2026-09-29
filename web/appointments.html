@@ -217,15 +217,34 @@
       }
 
       // Приветствие — имя из БД (GET /api/auth/me), не подделка на клиенте.
+      // Страница — кабинет КЛИЕНТА, поэтому запрос отправляем только клиенту.
+      // GET /api/bookings владельцу отдаёт все записи студии, а мастеру — свои,
+      // и в блоке «Мои записи» это читалось бы как чужие визиты. Поэтому роль
+      // проверяем здесь, до запроса: кабинет без роли client ничего не грузит.
+      function isClientRole(user) {
+        return !!user && Array.isArray(user.roles) && user.roles.indexOf('client') !== -1;
+      }
+
       window.api.me().then(function (user) {
         if (!user) { window.location.replace('login.html'); return; }
+        if (!isClientRole(user)) {
+          hideLoading();
+          tabs.hidden = true;
+          empty.hidden = true;
+          var role = (user.roles || []).indexOf('owner') !== -1 ? 'владельцу' : 'мастеру';
+          var el = document.getElementById('error');
+          el.className = 'alert';
+          el.textContent = 'Это кабинет клиента. Записи всех клиентов и свой график ' + role +
+            'смотрите в своей рабочей программе — здесь показываются только ваши собственные записи.';
+          el.hidden = false;
+          return;
+        }
         var greet = document.getElementById('greet');
         var name = user.client_name || user.username;
         if (greet && name) greet.textContent = 'Здравствуйте, ' + name + '! Ваши записи и их статусы:';
+        state.tab = new URLSearchParams(window.location.search).get('tab') === 'history' ? 'history' : 'active';
+        load();
       });
-
-      state.tab = new URLSearchParams(window.location.search).get('tab') === 'history' ? 'history' : 'active';
-      load();
     })();
   </script>
 </body>
