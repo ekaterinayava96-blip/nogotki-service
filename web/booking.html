@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
@@ -15,7 +15,7 @@
   <div id="global-header"></div>
 
   <main class="container" style="padding-top:var(--space-6)">
-    <h2 style="margin-bottom:var(--space-4)">Онлайн-запись</h2>
+    <h2 style="margin-bottom:var(--space-4)" id="pageTitle">Онлайн-запись</h2>
     <div id="error" class="alert alert--error" hidden></div>
 
     <!-- Без входа слот не удержать и запись не создать: показываем вход -->
@@ -30,36 +30,59 @@
     </div>
 
     <div id="flow" hidden>
+      <!-- Режим переноса (?booking=<id>): услуги и мастер уже выбраны клиентом
+           раньше, поэтому шаги 1–2 скрыты, а прежнее время показывается
+           отдельным состоянием над календарём. -->
+      <div class="panel panel--tint" id="rescheduleBar" hidden style="margin-bottom:var(--space-5)">
+        <h3 style="margin-bottom:var(--space-2)">Перенос записи</h3>
+        <p class="hint" id="rescheduleAbout" style="margin-bottom:var(--space-3)"></p>
+        <p class="reschedule__old" id="rescheduleOld"></p>
+        <p style="margin:var(--space-3) 0 0"><a class="linklike" id="rescheduleBack" href="appointments.html">← Вернуться к записи</a></p>
+      </div>
+
       <div class="stepper" id="stepper">
-        <div class="stepper__step is-active" data-step="1"><span class="stepper__num">1</span><span class="stepper__label">Услуга</span></div>
+        <button type="button" class="stepper__step is-active" data-step="1"><span class="stepper__num">1</span><span class="stepper__label">Услуга</span></button>
         <div class="stepper__connector"></div>
-        <div class="stepper__step" data-step="2"><span class="stepper__num">2</span><span class="stepper__label">Мастер</span></div>
+        <button type="button" class="stepper__step is-future" data-step="2"><span class="stepper__num">2</span><span class="stepper__label">Мастер</span></button>
         <div class="stepper__connector"></div>
-        <div class="stepper__step" data-step="3"><span class="stepper__num">3</span><span class="stepper__label">Дата</span></div>
+        <button type="button" class="stepper__step is-future" data-step="3"><span class="stepper__num">3</span><span class="stepper__label">Дата</span></button>
         <div class="stepper__connector"></div>
-        <div class="stepper__step" data-step="4"><span class="stepper__num">4</span><span class="stepper__label">Время</span></div>
+        <button type="button" class="stepper__step is-future" data-step="4"><span class="stepper__num">4</span><span class="stepper__label">Время</span></button>
         <div class="stepper__connector"></div>
-        <div class="stepper__step" data-step="5"><span class="stepper__num">5</span><span class="stepper__label">Контакты</span></div>
+        <button type="button" class="stepper__step is-future" data-step="5"><span class="stepper__num">5</span><span class="stepper__label">Контакты</span></button>
       </div>
 
       <div class="layout--booking">
         <div>
-          <!-- ШАГ 1: УСЛУГА -->
+          <!-- ШАГ 1: УСЛУГИ (можно выбрать несколько) -->
           <div class="step is-visible" id="step-service">
-            <h3 style="margin-bottom:var(--space-4)">Выберите услугу</h3>
+            <h3 style="margin-bottom:var(--space-2)">Выберите услуги</h3>
+            <p class="hint" style="margin-bottom:var(--space-4)">Можно выбрать несколько услуг — итоговая сумма и время пересчитаются сразу.</p>
             <div id="serviceList" class="grid">
               <div class="skeleton skel-row"></div>
               <div class="skeleton skel-row"></div>
               <div class="skeleton skel-row"></div>
             </div>
+            <div class="step__foot">
+              <span class="step__total" id="serviceTotal">Итого: —</span>
+              <div class="step__foot-actions">
+                <span class="hint" id="serviceHint">Выберите хотя бы одну услугу</span>
+                <button type="button" class="btn btn--primary btn--md" id="toMaster" disabled>Далее →</button>
+              </div>
+            </div>
           </div>
 
-          <!-- ШАГ 2: МАСТЕР -->
+          <!-- ШАГ 2: МАСТЕР (с учётом выбранных услуг) -->
           <div class="step" id="step-master">
-            <h3 style="margin-bottom:var(--space-4)">Выберите мастера</h3>
+            <h3 style="margin-bottom:var(--space-2)">Выберите мастера</h3>
+            <p class="hint" id="masterAbout" style="margin-bottom:var(--space-4)">Показываем мастеров, которые делают выбранные услуги.</p>
             <div id="masterList" style="display:flex; flex-direction:column; gap:var(--space-3)"></div>
-            <div class="step__nav">
+            <div class="step__foot">
               <button type="button" class="btn btn--secondary btn--sm" data-back="1">← Назад</button>
+              <div class="step__foot-actions">
+                <span class="hint" id="masterHint">Выберите мастера</span>
+                <button type="button" class="btn btn--primary btn--md" id="toDate" disabled>Далее →</button>
+              </div>
             </div>
           </div>
 
@@ -68,10 +91,15 @@
             <h3 style="margin-bottom:var(--space-4)">Выберите дату</h3>
             <div class="calendar">
               <div class="calendar__head">
+                <button type="button" class="calendar__nav" id="monthPrev" aria-label="Предыдущий месяц">←</button>
                 <span class="calendar__month" id="calendarMonth"></span>
-                <span class="hint">Ближайшие 14 дней</span>
+                <button type="button" class="calendar__nav" id="monthNext" aria-label="Следующий месяц">→</button>
               </div>
               <div class="calendar__grid" id="calendar"></div>
+              <p class="calendar__legend">
+                <span class="calendar__dot"></span> есть свободные окна ·
+                зачёркнутые дни — занято, выходной или уже прошло
+              </p>
             </div>
             <div class="step__nav">
               <button type="button" class="btn btn--secondary btn--sm" data-back="2">← Назад</button>
@@ -81,41 +109,60 @@
           <!-- ШАГ 4: ВРЕМЯ -->
           <div class="step" id="step-time">
             <h3 style="margin-bottom:var(--space-4)">Выберите время</h3>
-            <div class="alert alert--success">Показаны только свободные окна мастера на выбранную дату. Занятые и перерывы не выводятся.</div>
-            <div id="slotList" class="slots"></div>
+            <p class="hint" id="slotsDay"></p>
+            <div id="slotState"></div>
+            <div id="slotList" class="slots" hidden></div>
+            <p class="slots__legend" id="slotLegend" hidden></p>
+            <div id="slotNote"></div>
+            <p class="slots__result" id="slotResult" hidden></p>
             <div class="step__nav">
               <button type="button" class="btn btn--secondary btn--sm" data-back="3">← Назад</button>
               <button type="button" class="btn btn--primary btn--md" id="chooseTime" disabled>Выбрать время</button>
             </div>
           </div>
 
-          <!-- ШАГ 5: КОНТАКТЫ (только чтение: данные из аккаунта) -->
+          <!-- ШАГ 5: ПОДТВЕРЖДЕНИЕ ЗАПИСИ (Booking 04) -->
           <div class="step" id="step-contacts">
-            <h3 style="margin-bottom:var(--space-4)">Ваши контакты</h3>
-            <div class="panel">
-              <div class="contacts__line">
-                <span class="contacts__label">Запись оформляется на</span>
-                <span class="contacts__value" id="contactName">—</span>
-              </div>
-              <div class="contacts__line">
-                <span class="contacts__label">Телефон</span>
-                <span class="contacts__value" id="contactPhone">—</span>
-              </div>
-              <p class="hint" id="contactPhoneNote" hidden style="margin-bottom:var(--space-4)">
-                Телефон взят из аккаунта при регистрации — здесь API его не отдаёт, поэтому поле показано прочерком.
-              </p>
-              <p class="hint" id="holdNote" style="margin-bottom:var(--space-4)"></p>
-              <button type="button" class="btn btn--primary btn--lg btn--block" id="submitBooking">Подтвердить запись 💖</button>
-              <div class="step__nav">
-                <button type="button" class="btn btn--secondary btn--sm" data-back="4">← Назад</button>
-              </div>
-            </div>
-          </div>
+            <h3 style="margin-bottom:var(--space-4)" id="confirmTitle">Подтвердите запись</h3>
 
-          <!-- СЛOT_CONFLICT: ближайшее свободное время -->
-          <div class="panel" id="conflict" hidden style="margin-top:var(--space-5)">
-            <h3 style="margin-bottom:var(--space-3)">Ближайшее свободное время</h3>
-            <div class="slots" id="conflictSlots"></div>
+            <!-- Удержание слота: обратный отсчёт до конца (Booking 04) -->
+            <div class="hold" id="holdState" hidden></div>
+
+            <form class="panel" id="confirmForm" novalidate>
+              <!-- В режиме переноса контакты не редактируются: запись уже
+                   существует, а её поля меняются в кабинете. -->
+              <div id="contactFields">
+                <div class="field" id="fieldName">
+                  <label for="clientName">Имя</label>
+                  <input id="clientName" name="name" type="text" placeholder="Как к вам обращаться?" autocomplete="name" />
+                  <span class="hint">Запись оформляется на вас</span>
+                </div>
+                <div class="field" id="fieldPhone">
+                  <label for="clientPhone">Телефон</label>
+                  <input id="clientPhone" name="phone" type="tel" placeholder="+7 (___) ___-__-__" autocomplete="tel" inputmode="tel" />
+                  <span class="hint">Нужен для связи и напоминания за 24 часа</span>
+                </div>
+              </div>
+              <div class="step__foot" id="contactServices" hidden>
+                <span class="step__total" id="contactServicesTotal"></span>
+                <span class="step__hint" id="contactServicesList"></span>
+              </div>
+              <button type="submit" class="btn btn--primary btn--lg btn--block" id="submitBooking">Подтвердить запись 💖</button>
+              <div class="step__nav">
+                <button type="button" class="btn btn--secondary btn--sm" data-back="4">← Изменить время</button>
+              </div>
+            </form>
+
+            <!-- Booking 04b: слот заняли, пока клиент оформлял запись.
+                 Это состояние того же экрана, а не отдельная страница. -->
+            <div class="panel panel--tint" id="conflict" hidden style="margin-top:var(--space-5)">
+              <h3 style="margin-bottom:var(--space-3)">Время заняли, пока вы оформляли запись</h3>
+              <div class="alert alert--error" id="conflictText" style="margin-bottom:var(--space-4)"></div>
+              <div class="slots" id="conflictSlots"></div>
+              <p style="margin-top:var(--space-4)">
+                <button type="button" class="linklike" id="conflictOther">Выбрать другое время</button>
+              </p>
+            </div>
           </div>
         </div>
 
@@ -124,10 +171,30 @@
           <div class="panel panel--tint">
             <h3 style="margin-bottom:var(--space-4)">Ваша запись</h3>
             <dl class="summary">
-              <div class="summary__row"><dt>Услуга</dt><dd id="sumService">—</dd></div>
-              <div class="summary__row"><dt>Мастер</dt><dd id="sumMaster">—</dd></div>
-              <div class="summary__row"><dt>Дата и время</dt><dd id="sumWhen">—</dd></div>
+              <div class="summary__row">
+                <dt>Услуги</dt>
+                <dd class="summary__cell"><span id="sumService">—</span><button type="button" class="linklike" data-go="1" id="sumServiceEdit">Изменить</button></dd>
+              </div>
+              <div class="summary__row">
+                <dt>Мастер</dt>
+                <dd class="summary__cell"><span id="sumMaster">—</span><button type="button" class="linklike" data-go="2" id="sumMasterEdit">Изменить</button></dd>
+              </div>
+              <div class="summary__row">
+                <dt>Дата</dt>
+                <dd class="summary__cell"><span id="sumDate">—</span><button type="button" class="linklike" data-go="3">Изменить</button></dd>
+              </div>
+              <div class="summary__row">
+                <dt>Время</dt>
+                <dd class="summary__cell"><span id="sumTime">—</span><button type="button" class="linklike" data-go="4">Изменить</button></dd>
+              </div>
+              <!-- Режим переноса: прежнее время видно рядом с новым, иначе
+                   клиент не понимает, какую запись он переносит. -->
+              <div class="summary__row" id="sumOldRow" hidden>
+                <dt>Прежнее время</dt>
+                <dd class="summary__cell"><span id="sumOld">—</span></dd>
+              </div>
               <div class="summary__divider"></div>
+              <div class="summary" id="sumPrices"></div>
               <div class="summary__row summary__total"><dt>Итого</dt><dd id="sumPrice">—</dd></div>
             </dl>
           </div>
@@ -137,30 +204,65 @@
   </main>
 
   <script src="js/api.js"></script>
+  <script src="js/store.js"></script>
   <script src="js/header.js"></script>
   <script>
     (function () {
       var DAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
       var MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля',
                     'августа', 'сентября', 'октября', 'ноября', 'декабря'];
-      var CAL_DAYS = 14; // календарь на 14 дней (карта экранов, шаг «Дата»)
+      var MONTHS_NOM = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль',
+                        'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
       var STEP_IDS = ['step-service', 'step-master', 'step-date', 'step-time', 'step-contacts'];
       var state = {
-        user: null, services: [], masters: [], workdays: [], phone: null,
-        service: null, master: null, date: null, slot: null, hold: null
+        user: null, services: [], masters: [], phone: null,
+        serviceIds: [], master: null, savedMasterId: null,
+        date: null, slot: null, hold: null, step: 1,
+        holdTimer: null, contactsFilled: false, contactName: '', contactPhone: '',
+        month: window.api.todaySalon().slice(0, 7), // показываемый месяц 'YYYY-MM'
+        monthDays: [], monthLoading: false, monthError: false, monthReq: 0,
+        slots: null, slotsLoading: false, slotsError: false, slotsReq: 0,
+        // Режим переноса: reschedule = переносимая запись (или null для новой).
+        reschedule: null
       };
 
       function $(id) { return document.getElementById(id); }
 
+      // Выбранные услуги в порядке выбора (только те, что ещё есть в ответе API)
+      function selectedServices() {
+        return state.serviceIds.map(function (id) {
+          return state.services.filter(function (s) { return s.id === id; })[0];
+        }).filter(Boolean);
+      }
+
+      // Итоги по выбору. Значения price_kopecks/duration_minutes пришли с сервера
+      // (GET /api/services); отдельной суммы сервер не отдаёт, поэтому складываем
+      // их здесь, в одном месте.
+      function totals() {
+        var list = selectedServices();
+        return {
+          count: list.length,
+          price: list.reduce(function (sum, s) { return sum + Number(s.price_kopecks || 0); }, 0),
+          minutes: list.reduce(function (sum, s) { return sum + Number(s.duration_minutes || 0); }, 0)
+        };
+      }
+
+      // Выбор клиента — в sessionStorage тем же способом, что в черновом фронте.
+      // В режиме переноса выбор задан существующей записью, поэтому черновик
+      // новой записи не трогаем: иначе перенос затёр бы начатый черновик.
+      function saveDraft() {
+        if (state.reschedule) return;
+        window.store.save({
+          service_ids: state.serviceIds.slice(),
+          master_id: state.master ? state.master.id : null,
+          date: state.date,
+          starts_at: state.slot ? state.slot.starts_at : null
+        });
+      }
+
       // Дата салона 'YYYY-MM-DD' -> объект UTC-полдень (номер дня недели не съезжает)
       function noon(iso) { return new Date(iso + 'T12:00:00+03:00'); }
-      function addDays(iso, n) {
-        var d = noon(iso);
-        d.setUTCDate(d.getUTCDate() + n);
-        return d.toISOString().slice(0, 10);
-      }
       function weekdayOf(iso) { return noon(iso).getUTCDay(); }
-      function monthOf(iso) { return MONTHS[noon(iso).getUTCMonth()]; }
       function prettyDate(iso) {
         var p = iso.split('-');
         return p[2] + '.' + p[1] + '.' + p[0] + ', ' + DAYS[weekdayOf(iso)];
@@ -170,7 +272,10 @@
         return new Date(new Date(iso).getTime() + 180 * 60000).toISOString().slice(0, 10);
       }
 
+      // Шаг индикатора: пройденные кликабельны, текущий выделен, будущие приглушены
       function goStep(n) {
+        var was = state.step;
+        state.step = n;
         STEP_IDS.forEach(function (id, i) {
           var el = $(id);
           if (el) el.classList.toggle('is-visible', i === n - 1);
@@ -178,45 +283,103 @@
           if (st) {
             st.classList.toggle('is-active', i + 1 === n);
             st.classList.toggle('is-done', i + 1 < n);
+            st.classList.toggle('is-future', i + 1 > n);
+            st.disabled = i + 1 > n; // дальше пройденного — не переходим
           }
         });
+        // Удержание слота живёт ровно на экране подтверждения: вошли — берём
+        // слот, вышли — отпускаем, чтобы не держать занятое время, пока
+        // клиент ходит по шагам назад.
+        // В режиме переноса удержания нет: запись уже существует, а PATCH
+        // переноса проверяет занятость слота сам.
+        if (n === 5) { if (state.reschedule) renderConfirm(); else enterConfirm(); }
+        else if (was === 5) { if (!state.reschedule) leaveConfirm(); }
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }
 
       function renderSummary() {
-        $('sumService').textContent = state.service ? state.service.name : '—';
+        var t = totals();
+        var list = selectedServices();
+        $('sumService').textContent = list.length
+          ? (t.count > 1 ? t.count + ' услуги: ' : '') + list.map(function (s) { return s.name; }).join(', ')
+          : '—';
         $('sumMaster').textContent = state.master ? state.master.name : '—';
-        $('sumWhen').textContent = state.slot ? window.api.fmt(state.slot.starts_at)
-          : (state.date ? prettyDate(state.date) : '—');
-        $('sumPrice').textContent = state.service ? window.api.rub(state.service.price_kopecks) : '—';
+        $('sumDate').textContent = state.date ? prettyDate(state.date) : '—';
+        $('sumTime').textContent = state.slot ? window.api.fmt(state.slot.starts_at) : '—';
+        // Прежнее время показываем только в режиме переноса — в обычной записи
+        // его просто нет.
+        $('sumOldRow').hidden = !state.reschedule;
+        if (state.reschedule) {
+          $('sumOld').textContent = window.api.fmt(state.reschedule.starts_at) +
+            '—' + window.api.hour(state.reschedule.ends_at);
+        }
+        // Услуги и мастер в переносе зафиксированы: «Изменить» уводит на
+        // скрытые шаги, поэтому кнопки убираем, а не оставляем в никуда.
+        $('sumServiceEdit').hidden = !!state.reschedule;
+        $('sumMasterEdit').hidden = !!state.reschedule;
+        // Цены построчно: клиент видит, из чего сложился итог
+        $('sumPrices').innerHTML = list.map(function (s) {
+          return '<div class="summary__row"><dt>' + window.api.esc(s.name) + '</dt>' +
+            '<dd>' + window.api.rub(s.price_kopecks) + '</dd></div>';
+        }).join('');
+        $('sumPrice').textContent = t.count ? window.api.rub(t.price) : '—';
       }
 
-      // ШАГ 1 — услуги
+      // ШАГ 1 — услуги: выбор нескольких, снизу итог и подсказка к «Далее»
       function renderServices() {
+        var t = totals();
         $('serviceList').innerHTML = state.services.map(function (s) {
-          var sel = state.service && state.service.id === s.id;
-          return '<button type="button" class="option' + (sel ? ' is-selected' : '') + '" data-service="' + s.id + '">' +
+          var sel = state.serviceIds.indexOf(s.id) !== -1;
+          return '<button type="button" class="option' + (sel ? ' is-selected' : '') + '" data-service="' + s.id +
+            '" aria-pressed="' + (sel ? 'true' : 'false') + '">' +
+            '<span class="option__check" aria-hidden="true">' + (sel ? '✓' : '') + '</span>' +
             '<span>' +
               '<span class="option__title">' + window.api.esc(s.name) + '</span><br>' +
-              '<span class="option__meta">' + window.api.esc(s.description || '') + ' · ' + s.duration_minutes + ' мин</span>' +
+              '<span class="option__meta">' + window.api.esc(s.description || '') + '</span>' +
             '</span>' +
-            '<span class="option__price">' + window.api.rub(s.price_kopecks) + '</span>' +
+            '<span class="option__side">' +
+              '<span class="option__price">' + window.api.rub(s.price_kopecks) + '</span><br>' +
+              '<span class="option__meta">⏱ ' + window.api.duration(s.duration_minutes) + '</span>' +
+            '</span>' +
           '</button>';
         }).join('');
+
+        $('serviceTotal').textContent = t.count
+          ? 'Итого: ' + window.api.rub(t.price) + ' · ' + window.api.duration(t.minutes)
+          : 'Итого: —';
+        $('serviceHint').textContent = t.count
+          ? 'Услуг выбрано: ' + t.count
+          : 'Выберите хотя бы одну услугу';
+        $('toMaster').disabled = !t.count;
       }
 
-      // ШАГ 2 — только мастера, умеющие выбранную услугу
+      // ШАГ 2 — мастера: с сервера по выбранным услугам; кто не делает — неактивен
+      function masterMissing(m) {
+        var have = (m.services || []).map(function (s) { return s.id; });
+        return selectedServices().filter(function (s) { return have.indexOf(s.id) === -1; });
+      }
+
       function renderMasters() {
         var host = $('masterList');
-        if (!state.service) { host.innerHTML = ''; return; }
-        var list = state.masters.filter(function (m) {
-          return (m.services || []).some(function (s) { return s.id === state.service.id; });
-        });
+        var t = totals();
+        if (!t.count) { host.innerHTML = ''; $('toDate').disabled = true; return; }
+
+        var list = state.masters;
+        $('masterAbout').textContent = 'Выбранные услуги: ' + selectedServices()
+          .map(function (s) { return s.name; }).join(', ');
+
         if (!list.length) {
-          host.innerHTML = '<p class="stub">На эту услугу мастеров пока нет — выберите другую.</p>';
+          host.innerHTML = '<p class="stub">Мастера не загрузились. Обновите страницу.</p>';
+          $('masterHint').textContent = 'Нет списка мастеров';
+          $('toDate').disabled = true;
           return;
         }
+
+        var fit = 0;
         host.innerHTML = list.map(function (m) {
+          var missing = masterMissing(m);
+          var ok = missing.length === 0;
+          if (ok) fit++;
           var sel = state.master && state.master.id === m.id;
           var initial = window.api.esc((m.name || '?').trim().charAt(0).toUpperCase());
           var avatar = m.photo_path
@@ -224,241 +387,978 @@
             : '<span class="option__avatar">' + initial + '</span>';
           var meta = window.api.esc(m.role || '') +
             (m.experience_years ? ' · в профессии ' + m.experience_years + ' лет' : '');
-          return '<button type="button" class="option' + (sel ? ' is-selected' : '') + '" data-master="' + m.id + '">' +
+          return '<button type="button" class="option' + (sel ? ' is-selected' : '') + (ok ? '' : ' is-disabled') + '"' +
+            (ok ? '' : ' disabled') + ' data-master="' + m.id + '">' +
             avatar +
             '<span>' +
               '<span class="option__title">' + window.api.esc(m.name) + '</span><br>' +
               '<span class="option__meta">' + meta + '</span>' +
+              (ok ? '' : '<span class="option__note">Не делает: ' +
+                window.api.esc(missing.map(function (s) { return s.name; }).join(', ')) + '</span>') +
             '</span>' +
           '</button>';
         }).join('');
+
+        $('toDate').disabled = !(fit && state.master);
+        $('masterHint').textContent = !fit
+          ? 'Подходящих мастеров нет — уберите лишние услуги'
+          : (state.master ? 'Мастер выбран' : 'Выберите мастера');
       }
 
-      // ШАГ 3 — календарь: 14 дней, рабочие дни студии, прошедшие выключены
-      function renderCalendar() {
-        var today = window.api.todaySalon();
-        var last = addDays(today, CAL_DAYS - 1);
-        $('calendarMonth').textContent = monthOf(today) === monthOf(last)
-          ? monthOf(today)
-          : monthOf(today) + ' — ' + monthOf(last);
+      // Список мастеров запрашиваем с учётом выбранных услуг
+      function loadMasters() {
+        var ids = state.serviceIds.join(',');
+        return window.api.request('/api/masters' + (ids ? '?service_ids=' + ids : ''))
+          .then(function (d) {
+            state.masters = d.masters;
+            // Сохранённого мастера находим здесь — на момент restore() списка
+            // мастеров ещё не было
+            if (!state.master && state.savedMasterId) {
+              state.master = state.masters.filter(function (m) { return m.id === state.savedMasterId; })[0] || null;
+            }
+            // Мастер из выбора мог не подходить под новый набор услуг
+            if (state.master && masterMissing(state.master).length) state.master = null;
+            renderMasters();
+          });
+      }
 
+      // ШАГ 3 — календарь месяца. Дни приходят из API с готовым ответом: есть
+      // ли свободные окна и почему дня нет. Прошедшие дни и выходные показаны,
+      // но не выбираются; будний день без окон открывается — на шаге «Время»
+      // клиент увидит, как расширить поиск (Booking 03a).
+
+      // Границы месяца для запроса и для сетки: календарная арифметика, а не
+      // расчёт доступности — её делает сервер.
+      function monthRange(y, m) {
+        var last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+        var mm = m < 9 ? '0' + (m + 1) : String(m + 1);
+        return { from: y + '-' + mm + '-01', to: y + '-' + mm + '-' + String(last), days: last };
+      }
+
+      function shiftMonth(n) {
+        var parts = state.month.split('-');
+        var d = new Date(Date.UTC(Number(parts[0]), Number(parts[1]) - 1 + n, 1));
+        state.month = d.getUTCFullYear() + '-' + (d.getUTCMonth() < 9 ? '0' : '') + (d.getUTCMonth() + 1);
+      }
+
+      function monthLabel() {
+        var parts = state.month.split('-');
+        var m = monthRange(Number(parts[0]), Number(parts[1]) - 1);
+        return MONTHS_NOM[Number(parts[1]) - 1] + ' ' + parts[0];
+      }
+
+      function renderCalendar() {
+        var head = $('calendarMonth');
+        head.textContent = monthLabel();
+        // В прошлый месяц нельзя, в следующий — можно.
+        // Текущий месяц считаем по дате салона, а не по часам браузера клиента.
+        $('monthPrev').disabled = state.month <= window.api.todaySalon().slice(0, 7);
+        $('monthNext').disabled = false;
+
+        var host = $('calendar');
+        if (!state.master) {
+          host.innerHTML = '<p class="stub">Сначала выберите мастера — тогда мы покажем его свободные дни.</p>';
+          return;
+        }        if (state.monthLoading) {
+          host.innerHTML = loadingBlock('Загружаем свободные дни…');
+          return;
+        }
+        if (state.monthError) {
+          host.innerHTML = errorBlock('Не удалось загрузить календарь. Проверьте соединение и попробуйте ещё раз.', 'Повторить', 'monthRetry');
+          return;
+        }
+
+        var parts = state.month.split('-');
+        var range = monthRange(Number(parts[0]), Number(parts[1]) - 1);
+        var byDate = {};
+        state.monthDays.forEach(function (d) { byDate[d.date] = d; });
+
+        // Шапка дней недели, как в прототипе: пн…вс
         var html = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс']
           .map(function (d) { return '<div class="calendar__wd">' + d + '</div>'; }).join('');
 
-        for (var i = 0; i < (weekdayOf(today) + 6) % 7; i++) html += '<div></div>';
+        var firstWd = (new Date(range.from + 'T12:00:00+03:00').getUTCDay() + 6) % 7;
+        for (var i = 0; i < firstWd; i++) html += '<div class="calendar__pad"></div>';
 
-        for (var k = 0; k < CAL_DAYS; k++) {
-          var iso = addDays(today, k);
-          var wd = weekdayOf(iso);
-          var work = state.workdays.length === 0 || state.workdays.indexOf(wd) !== -1;
-          var off = !work; // прошедшие дни в календарь не попадают: начинаем с сегодня
-          html += '<button type="button" class="day' + (state.date === iso ? ' is-selected' : '') + '"' +
-            (off ? ' disabled' : '') + ' data-date="' + iso + '">' +
-            '<span class="day__num">' + Number(iso.split('-')[2]) + '</span>' +
-            '<span class="day__wd">' + DAYS[wd] + '</span>' +
-          '</button>';
+        for (var day = 1; day <= range.days; day++) {
+          var iso = range.from.slice(0, 8) + (day < 10 ? '0' + day : String(day));
+          var info = byDate[iso];
+          var hasFree = !!(info && info.slots_count > 0);
+          // Прошедшие дни и выходной недоступны; будний без окон открыт —
+          // на шаге «Время» покажем, как расширить поиск.
+          var blocked = !info || info.is_past || !info.is_workday;
+          var cls = 'day' + (state.date === iso ? ' is-selected' : '');
+          if (hasFree) cls += ' is-free';
+          else cls += ' is-empty';
+          if (info && info.is_past) cls += ' is-past';
+          if (info && !info.is_workday) cls += ' is-off';
+          html += '<button type="button" class="' + cls + '" data-date="' + iso + '"' +
+            (blocked ? ' disabled' : '') + ' title="' + dayTitle(info) + '">' +
+            '<span class="day__num">' + day + '</span></button>';
         }
-        $('calendar').innerHTML = html;
+        host.innerHTML = html;
       }
 
-      // ШАГ 4 — свободные слоты
-      function loadSlots() {
-        var host = $('slotList');
-        $('chooseTime').disabled = true;
-        host.innerHTML = '<div class="skeleton skel-row"></div><div class="skeleton skel-row"></div><div class="skeleton skel-row"></div>';
-        window.api.request('/api/masters/' + state.master.id + '/slots?date=' + state.date +
-                           '&service_ids=' + state.service.id + '&step_minutes=60')
+      // Подсказка на дне календаря: почему день недоступен или пуст
+      function dayTitle(info) {
+        if (!info) return '';
+        if (info.is_past) return 'Дата уже прошла';
+        if (!info.is_workday) return 'У мастера выходной';
+        if (info.slots_count > 0) return 'Свободных окон: ' + info.slots_count;
+        return dayReasonText(info);
+      }
+
+      function dayReasonText(info) {
+        if (!info) return '';
+        if (info.reason === 'day_off') return 'У мастера в этот день выходной';
+        if (info.reason === 'past') return 'Этот день уже прошёл';
+        if (info.reason === 'too_long') {
+          // Числа есть только в ответе по дню: в сводке по месяцу окно не дублируется
+          if (info.duration_minutes && info.window) {
+            return 'Рабочий день мастера короче визита: нужно ' + window.api.duration(info.duration_minutes) +
+              ', а окно в этот день — ' + window.api.duration(info.window.end_minutes - info.window.start_minutes);
+          }
+          return 'Рабочий день мастера короче выбранного набора услуг';
+        }
+        // Заняты все окна дня. Сетка при этом остаётся на экране — по ней и видно,
+        // что окна заняты, а не потерялись.
+        if (info.reason === 'booked') return 'Все окна этого дня уже заняты';
+        return 'Свободных окон в этот день нет';
+      }
+
+      // Месяц целиком: какие дни есть, где есть окна, где ближайшее свободное время
+      function loadMonth() {
+        if (!state.master) { renderCalendar(); return; }
+        var parts = state.month.split('-');
+        var range = monthRange(Number(parts[0]), Number(parts[1]) - 1);
+        // Номер запроса: ответ по старому месяцу не должен затирать новый
+        var req = ++state.monthReq;
+        state.monthLoading = true;
+        state.monthError = false;
+        renderCalendar();
+        window.api.request('/api/masters/' + state.master.id + '/availability?date_from=' + range.from +
+          '&date_to=' + range.to + '&service_ids=' + state.serviceIds.join(',') + '&step_minutes=60')
           .then(function (d) {
-            if (!d.slots.length) {
-              host.innerHTML = '<p class="stub">На эту дату свободных окон нет. Выберите другую дату.</p>';
-              return;
+            if (req !== state.monthReq) return;
+            state.monthLoading = false;
+            state.monthDays = d.days || [];
+            // Выбранной даты может не оказаться в ответе — тогда идём к ближайшему дню с окнами
+            var cur = state.monthDays.filter(function (x) { return x.date === state.date; })[0];
+            if (state.date && (!cur || cur.slots_count === 0)) {
+              state.date = null;
+              state.slot = null;
             }
-            host.innerHTML = d.slots.map(function (s) {
-              var sel = state.slot && state.slot.starts_at === s.starts_at;
-              return '<button type="button" class="slot' + (sel ? ' is-selected' : '') + '" data-slot="' +
-                window.api.esc(s.starts_at) + '">' + window.api.hour(s.starts_at) + '</button>';
-            }).join('');
+            renderCalendar();
+            saveDraft();
           })
           .catch(function () {
-            host.innerHTML = '<p class="stub">Не удалось загрузить свободное время. Попробуйте позже.</p>';
+            if (req !== state.monthReq) return;
+            state.monthLoading = false;
+            state.monthError = true;
+            renderCalendar();
           });
       }
 
-      // ШАГ 5 — контакты только для чтения: из аккаунта
-      function renderContacts() {
-        $('contactName').textContent = state.user.client_name || state.user.username || '—';
-        var hasPhone = !!state.phone;
-        $('contactPhone').textContent = hasPhone ? state.phone : '—';
-        $('contactPhoneNote').hidden = hasPhone;
+      // Всё, что живёт под сеткой, прячем вместе с ней: иначе легенда или блок
+      // «окон нет» остались бы от прежнего дня
+      function clearSlotExtras() {
+        $('slotList').hidden = true;
+        $('slotList').innerHTML = '';
+        $('slotLegend').hidden = true;
+        $('slotLegend').innerHTML = '';
+        $('slotNote').innerHTML = '';
+        $('slotResult').hidden = true;
+        $('chooseTime').disabled = true;
       }
 
-      // Конфликт слота: показываем ближайшее свободное время (карта, экран №26)
+      // ШАГ 4 — сетка окон дня. Сетку и состояние каждой ячейки считает сервер
+      // (free/busy/past), здесь только показ.
+      function loadSlots() {
+        if (!state.master || !state.date) return;
+        // Номер запроса: ответ по прошлому дню не должен затирать новый
+        var req = ++state.slotsReq;
+        clearSlotExtras();
+        $('slotsDay').textContent = prettyDate(state.date) + ' · ' + state.master.name;
+        state.slotsLoading = true;
+        state.slotsError = false;
+        renderSlots();
+
+        window.api.request('/api/masters/' + state.master.id + '/slots?date=' + state.date +
+                           '&service_ids=' + state.serviceIds.join(',') + '&step_minutes=60')
+          .then(function (d) {
+            if (req !== state.slotsReq) return;
+            state.slotsLoading = false;
+            state.slots = d;
+            // Сохранённый слот мог занять другой клиент или время могло уже
+            // пройти. Проверяем именно свободные ячейки: занятое или прошедшее
+            // время в резюме показывать нельзя — иначе подпись под сеткой будет
+            // расходиться с тем, что на сетке нарисовано.
+            if (state.slot && !d.cells.some(function (c) {
+              return c.starts_at === state.slot.starts_at && c.state === 'free';
+            })) {
+              state.slot = null;
+            }
+            renderSlots();
+            renderSummary();
+          })
+          .catch(function () {
+            if (req !== state.slotsReq) return;
+            state.slotsLoading = false;
+            state.slotsError = true;
+            state.slots = null;
+            renderSlots();
+          });
+      }
+
+      // Три состояния экрана «Время», и они должны отличаться друг от друга:
+      //   1) загрузка — индикатор, сетки нет;
+      //   2) есть окна — сетка, часть ячеек кликабельна;
+      //   3) окон нет — сетка (если сервер её вернул) плюс блок с подсказками.
+      // Сетку не прячем в третьем состоянии: клиент, который минуту назад видел
+      // в ней свободное 15:00, должен увидеть это же 15:00 зачёркнутым, а не
+      // обнаружить, что окно исчезло. Совсем без сетки остаются только дни, в
+      // которых её и не могло быть: выходной и визит длиннее рабочего дня.
+      function renderSlots() {
+        var host = $('slotList');
+        var stateBox = $('slotState');
+
+        if (state.slotsLoading) {
+          clearSlotExtras();
+          stateBox.innerHTML = loadingBlock('Загружаем свободное время…');
+          return;
+        }
+        if (state.slotsError) {
+          clearSlotExtras();
+          stateBox.innerHTML = errorBlock('Не удалось загрузить свободное время. Проверьте соединение и попробуйте ещё раз.', 'Повторить', 'slotsRetry');
+          return;
+        }
+        if (!state.slots) {
+          clearSlotExtras();
+          stateBox.innerHTML = '';
+          return;
+        }
+
+        var cells = state.slots.cells || [];
+        var free = cells.filter(function (c) { return c.state === 'free'; });
+
+        stateBox.innerHTML = '';
+        if (cells.length) {
+          host.hidden = false;
+          host.innerHTML = cells.map(renderCell).join('');
+          renderSlotLegend(cells);
+        } else {
+          // Сетки нет и быть не могло: выходной или визит не помещается в день
+          clearSlotExtras();
+        }
+
+        if (!free.length) {
+          // Выбирать нечего: подпись под сеткой и кнопку снимаем, а сам блок
+          // с подсказками кладём под сетку — окна остаются на экране
+          $('slotResult').hidden = true;
+          $('chooseTime').disabled = true;
+          $('slotNote').innerHTML = noFreeBlock();
+          return;
+        }
+        renderSlotResult(free);
+      }
+
+      // Ячейка сетки. Свободная — кнопка; занятая и прошедшая — видимые, но
+      // некликабельные элементы с причиной в подсказке. Всё приходит с сервера.
+      function renderCell(c) {
+        if (c.state === 'free') {
+          var sel = state.slot && state.slot.starts_at === c.starts_at;
+          return '<button type="button" class="slot' + (sel ? ' is-selected' : '') + '" data-slot="' +
+            window.api.esc(c.starts_at) + '">' + window.api.hour(c.starts_at) + '</button>';
+        }
+        if (c.state === 'past') {
+          return '<span class="slot is-past" aria-disabled="true" title="Это время уже прошло">' +
+            window.api.hour(c.starts_at) + '</span>';
+        }
+        return '<span class="slot is-busy" aria-disabled="true" title="' + window.api.esc(busyTitle(c.kind)) + '">' +
+          window.api.hour(c.starts_at) + '</span>';
+      }
+
+      // Легенда под сеткой — чтобы было видно, почему окно нельзя выбрать.
+      // Показывается только если в сетке есть хоть одно занятое или прошедшее окно.
+      function renderSlotLegend(cells) {
+        var busy = cells.some(function (c) { return c.state === 'busy'; });
+        var past = cells.some(function (c) { return c.state === 'past'; });
+        var el = $('slotLegend');
+        if (!busy && !past) { el.hidden = true; el.innerHTML = ''; return; }
+        el.innerHTML = (busy ? '<span class="slots__key slots__key--busy">занято</span>' : '') +
+          (past ? '<span class="slots__key slots__key--past">уже прошло</span>' : '') +
+          '<span class="slots__key slots__key--free">свободно</span>';
+        el.hidden = false;
+      }
+
+      // Почему окно занято — подпись из ответа сервера
+      function busyTitle(kind) {
+        if (kind === 'hold') return 'Время временно занято: клиент оформляет запись';
+        if (kind === 'block') return 'У мастера перерыв или блокировка времени';
+        if (kind === 'closure') return 'Студия в это время закрыта';
+        return 'В это время уже есть запись';
+      }
+
+      // Под сеткой: выбранное окно и время окончания визита. Обе цифры берём
+      // из starts_at/ends_at и duration_minutes ответа сервера — браузер
+      // длительность визита не складывает, чтобы подпись не разошлась с записью.
+      function renderSlotResult(free) {
+        var box = $('slotResult');
+        var cell = state.slot
+          ? free.filter(function (c) { return c.starts_at === state.slot.starts_at; })[0]
+          : null;
+        if (!cell) { box.hidden = true; $('chooseTime').disabled = true; return; }
+        box.hidden = false;
+        box.textContent = 'Начало в ' + window.api.hour(cell.starts_at) +
+          ' · визит закончится в ' + window.api.hour(cell.ends_at) +
+          ' · ' + window.api.duration(state.slots.duration_minutes);
+        $('chooseTime').disabled = false;
+      }
+
+      // Booking 03a: свободных окон нет. Тот же экран, только с подсказками.
+      function noFreeBlock() {
+        var info = state.slots;
+        var text = dayReasonText({ reason: info.reason, duration_minutes: info.duration_minutes, window: info.window });
+        var nearest = nextFreeFor(state.date);
+        var html = '<div class="nofree">' +
+          '<p class="nofree__title">Свободных окон нет</p>' +
+          '<p class="nofree__text">' + window.api.esc(text) + '.</p>';
+
+        if (nearest) {
+          html += '<p class="nofree__nearest">Ближайшее свободное время: <strong>' +
+            prettyDate(nearest.date) + ', ' + window.api.hour(nearest.starts_at) + '</strong></p>' +
+            '<button type="button" class="btn btn--secondary btn--sm" data-date="' + nearest.date + '">Перейти на ' +
+            prettyDate(nearest.date) + '</button>';
+        } else {
+          html += '<p class="nofree__nearest">В этом месяце свободных окон больше нет.</p>' +
+            '<button type="button" class="btn btn--secondary btn--sm" id="nextMonthHint">Посмотреть следующий месяц</button>';
+        }
+
+        html += '<ul class="nofree__hints">';
+        if (nearest) html += '<li>Посмотрите соседние дни в календаре — свободные отмечены точкой.</li>';
+        if (info.reason === 'too_long') html += '<li>Сократите набор услуг: он не помещается в рабочий день мастера.</li>';
+        html += '<li><button type="button" class="linklike" data-back="2">Сменить мастера</button> — у другого может быть свободное время в этот день.</li>';
+        html += '<li>Нужно раньше или в другой день — позвоните в студию, мастер запишет вас вручную.</li>';
+        html += '</ul></div>';
+        return html;
+      }
+
+      // Ближайшее свободное время после дня: значение из сводки по месяцу
+      function nextFreeFor(iso) {
+        var day = state.monthDays.filter(function (d) { return d.date === iso; })[0];
+        return day ? day.next_free : null;
+      }
+
+      function loadingBlock(text) {
+        return '<div class="loading"><span class="loading__spin" aria-hidden="true"></span>' +
+          '<span>' + window.api.esc(text) + '</span></div>';
+      }
+
+      function errorBlock(text, action, id) {
+        return '<div class="alert alert--warning">' + window.api.esc(text) +
+          ' <button type="button" class="btn btn--secondary btn--sm" id="' + id + '">' + action + '</button></div>';
+      }
+
+      // ---- Экран подтверждения (Booking 04) ----
+
+      function pad2(n) { return String(n).padStart(2, '0'); }
+      // Секунды -> «9:58» / «0:47»
+      function mmss(total) {
+        var s = Math.max(0, Math.floor(total));
+        return Math.floor(s / 60) + ':' + pad2(s % 60);
+      }
+
+      // Телефон маской, как в прототипе: в поле «+7 (900) 000-00-00», в API — цифры
+      function maskPhone(raw) {
+        var d = String(raw || '').replace(/\D/g, '');
+        if (d[0] === '8') d = '7' + d.slice(1);
+        if (d[0] === '9') d = '7' + d;
+        d = d.slice(0, 11);
+        var out = d.slice(0, 1) === '7' ? '+7' : '';
+        if (d.length > 1) out += ' (' + d.slice(1, 4);
+        if (d.length >= 5) out += ') ' + d.slice(4, 7);
+        if (d.length > 7) out += '-' + d.slice(7, 9);
+        if (d.length > 9) out += '-' + d.slice(9, 11);
+        return out;
+      }
+      // Валидатор требует 10-15 цифр с необязательным «+»: маску в запрос не шлём
+      function phoneDigits(value) {
+        var d = String(value || '').replace(/\D/g, '');
+        return d.length ? '+' + d : '';
+      }
+
+      function fieldError(id, message) {
+        var field = $(id);
+        if (!field) return;
+        field.classList.toggle('field--invalid', !!message);
+        var hint = field.querySelector('.field__error');
+        if (!hint) {
+          hint = document.createElement('span');
+          hint.className = 'field__error';
+          field.appendChild(hint);
+        }
+        hint.textContent = message || '';
+      }
+
+      // Поля контактов заполняем один раз за всю запись: правки клиента не
+      // затираем при повторном входе на экран (например, после «Изменить
+      // время», когда удержание снято и запрошено заново). Флаг относится
+      // только к форме и с удержанием ничего общего не имеет, поэтому при
+      // releaseHold() он не сбрасывается.
+      function fillContacts() {
+        if (state.contactsFilled) return;
+        state.contactsFilled = true;
+        $('clientName').value = state.contactName || '';
+        $('clientPhone').value = state.contactPhone ? maskPhone(state.contactPhone) : '';
+      }
+
+      function renderConfirm() {
+        var t = totals();
+        $('contactServices').hidden = !t.count;
+        $('contactServicesTotal').textContent = t.count
+          ? 'Итого: ' + window.api.rub(t.price) + ' · ' + window.api.duration(t.minutes)
+          : '';
+        $('contactServicesList').textContent = t.count
+          ? 'Услуги: ' + selectedServices().map(function (s) { return s.name; }).join(' + ')
+          : '';
+
+        if (state.reschedule) {
+          // Перенос: подтверждаем новое время, удержание слота не нужно —
+          // PATCH сам проверит, свободен ли слот, и вернёт 409 с подсказками.
+          $('holdState').hidden = true;
+          $('submitBooking').disabled = !state.slot || !t.count;
+          return;
+        }
+        // Подтверждать нечего без удержания слота и без выбранных услуг
+        $('submitBooking').disabled = !state.hold || !t.count;
+      }
+
+      // Вход на экран подтверждения: подставляем контакты и запрашиваем
+      // удержание слота — ровно в этот момент клиент начал оформлять запись.
+      function enterConfirm() {
+        fillContacts();
+        renderConfirm();
+        ensureHold();
+      }
+
+      // Выход с экрана: таймер останавливаем, удержание снимаем. Иначе клиент,
+      // который передумал и ушёл переделывать услугу или мастера, продолжил бы
+      // держать занятым слот, который сам же и забрал.
+      function leaveConfirm() {
+        stopTimer();
+        releaseHold();
+        hideConflict();
+      }
+
+      function releaseHold() {
+        var hold = state.hold;
+        state.hold = null;
+        $('holdState').hidden = true;
+        if (!hold) return;
+        window.api.request('/api/holds/' + encodeURIComponent(hold.hold_id), { method: 'DELETE' })
+          .catch(function () { /* слот и так освободится по истечении */ });
+      }
+
+      function ensureHold() {
+        // В режиме переноса слот не удерживается: перенос подтверждается сразу
+        // PATCH-запросом, и лишнее удержание только мешало бы другому клиенту.
+        if (state.reschedule) { renderConfirm(); return; }
+        if (state.hold) { startTimer(); return; }
+        if (!state.slot || !state.master) { renderConfirm(); return; }
+        hideConflict();
+        $('holdState').hidden = false;
+        $('holdState').className = 'hold';
+        $('holdState').innerHTML = '<span class="loading__spin" aria-hidden="true"></span>' +
+          '<span>Удерживаем выбранное время…</span>';
+        window.api.request('/api/holds', {
+          method: 'POST',
+          json: { master_id: state.master.id, starts_at: state.slot.starts_at, service_ids: state.serviceIds.slice() }
+        }).then(function (d) {
+          state.hold = d;
+          renderSummary();
+          renderConfirm();
+          startTimer();
+        }).catch(function (err) {
+          state.hold = null;
+          $('holdState').hidden = true;
+          renderSummary();
+          renderConfirm();
+          renderConflict(err);
+        });
+      }
+
+      function startTimer() {
+        stopTimer();
+        if (!state.hold) return;
+        var until = new Date(state.hold.expires_at).getTime();
+        var tick = function () {
+          var left = (until - Date.now()) / 1000;
+          holdView(left);
+          if (left <= 0) {
+            stopTimer();
+            // Локально помечаем удержание истёкшим: сервер всё равно ответит
+            // HOLD_EXPIRED, но ждать его, оставляя активной кнопку, незачем.
+            state.hold = null;
+            renderSummary();
+            renderConfirm();
+          }
+        };
+        tick();
+        state.holdTimer = window.setInterval(tick, 1000);
+      }
+
+      function stopTimer() {
+        if (state.holdTimer) { window.clearInterval(state.holdTimer); state.holdTimer = null; }
+      }
+
+      // Таймер удержания: обычный вид, отдельный вид меньше минуты и вид
+      // «время вышло». Порог в минуту — тот же, что и в прототипе.
+      function holdView(left) {
+        var box = $('holdState');
+        box.hidden = false;
+        if (left > 60) {
+          box.className = 'hold';
+          box.innerHTML = '<span>⏳ Время удерживается за вами</span>' +
+            '<span class="hold__time">' + mmss(left) + '</span>';
+          return;
+        }
+        if (left > 0) {
+          box.className = 'hold hold--warn';
+          box.innerHTML = '<span>⏳ Осталось меньше минуты — подтвердите запись</span>' +
+            '<span class="hold__time">' + mmss(left) + '</span>';
+          return;
+        }
+        box.className = 'hold hold--over';
+        box.innerHTML = '<span>Время удержания истекло — слот снова свободен</span>' +
+          '<button type="button" class="btn btn--secondary btn--sm" data-back="4">Выбрать время заново</button>';
+      }
+
+      // Booking 04b: слот заняли, пока клиент оформлял запись. Текст — из
+      // ответа API, варианты времени — из nearest_free того же ответа.
       function renderConflict(err) {
         var info = err && err.data && err.data.error ? err.data.error : null;
         var list = info && Array.isArray(info.nearest_free) ? info.nearest_free : [];
-        if (!list.length) { $('conflict').hidden = true; return; }
-        $('conflictSlots').innerHTML = list.map(function (s) {
-          return '<button type="button" class="slot" data-slot="' + window.api.esc(s.starts_at) + '">' +
-            window.api.fmt(s.starts_at) + '</button>';
-        }).join('');
-        $('conflictSlots').querySelectorAll('[data-slot]').forEach(function (btn) {
-          btn.addEventListener('click', function () {
-            state.date = slotDate(btn.dataset.slot);
-            state.slot = null;
-            state.hold = null;
-            $('conflict').hidden = true;
-            renderCalendar();
-            goStep(4);
-            loadSlots();
-          });
-        });
+        $('conflictText').textContent = (info && info.message) || (err && err.message) || '';
+        $('conflictSlots').innerHTML = list.length
+          ? list.map(function (s) {
+              return '<button type="button" class="slot" data-slot="' + window.api.esc(s.starts_at) + '">' +
+                window.api.fmt(s.starts_at) + '</button>';
+            }).join('')
+          : '<p class="hint">Ближайших свободных окон не нашлось — выберите дату заново.</p>';
+        // Тот же текст сервера уже показан общим #error — здесь он в панели
+        window.ui.clear();
         $('conflict').hidden = false;
       }
 
-      function selectService(id) {
-        state.service = state.services.filter(function (s) { return s.id === id; })[0] || null;
-        state.master = null; state.date = null; state.slot = null; state.hold = null;
+      function hideConflict() { $('conflict').hidden = true; }
+
+      // Вариант из nearest_free: слот берём сразу, без возврата на шаг «Время»
+      function pickSuggested(iso) {
+        // Если удерживается другой слот (например, клиент передумал, не дождавшись
+        // конфликта), старое удержание отпускаем — иначе ensureHold увидит живое
+        // удержание и просто перезапустит таймер на прежнем времени.
+        if (state.hold && state.hold.starts_at !== iso) { stopTimer(); releaseHold(); }
+        state.date = slotDate(iso);
+        state.slot = { starts_at: iso };
+        if (state.date.slice(0, 7) !== state.month) state.month = state.date.slice(0, 7);
+        renderCalendar();
+        renderSummary();
+        saveDraft();
+        ensureHold();
+      }
+
+      // ---------- Режим переноса ----------
+      // Запись уже есть, поэтому её услуги и мастер фиксированы, а шаги выбора
+      // услуги и мастера скрыты: клиент приходит сюда выбрать новое время.
+      // Прежнее время показываем над календарём и в резюме — перенос без него
+      // не читается как перенос.
+      function enterReschedule(bookingId) {
+        return window.api.request('/api/bookings/' + encodeURIComponent(bookingId))
+          .then(function (d) {
+            var b = d.booking;
+            state.reschedule = b;
+            state.serviceIds = window.api.servicesOf(b).list.map(function (s) { return s.id; });
+            state.master = { id: b.master.id, name: b.master.name, role: b.master.role };
+            state.slot = null;
+            state.hold = null;
+
+            // Прежний день открываем в календаре, но только если он не в прошлом:
+            // выбирать дату вчерашнего визита бессмысленно.
+            var oldDate = slotDate(b.starts_at);
+            if (oldDate >= window.api.todaySalon()) { state.date = oldDate; state.month = oldDate.slice(0, 7); }
+            else { state.date = null; state.month = window.api.todaySalon().slice(0, 7); }
+
+            // Шаги 1–2 и их разделители убираем из шагера: в переносе они
+            // недостижимы, и показывать их значит предлагать то, чего нет.
+            $('stepper').querySelectorAll('[data-step="1"], [data-step="2"]').forEach(function (el) { el.hidden = true; });
+            var stepperChildren = Array.prototype.slice.call($('stepper').children);
+            stepperChildren.slice(0, 2).forEach(function (el) { el.hidden = true; });
+            $('step-service').hidden = true;
+            $('step-master').hidden = true;
+
+            $('pageTitle').textContent = 'Перенос записи';
+            $('confirmTitle').textContent = 'Подтвердите перенос';
+            $('contactFields').hidden = true;
+            $('submitBooking').textContent = 'Перенести запись 💖';
+            $('rescheduleBar').hidden = false;
+            $('rescheduleAbout').textContent = 'Услуги и мастер остаются прежними — выберите новое время.';
+            $('rescheduleOld').innerHTML = 'Прежнее время: <b>' +
+              window.api.fmt(b.starts_at) + '—' + window.api.hour(b.ends_at) + '</b> · ' +
+              window.api.esc(window.api.servicesOf(b).names);
+            $('rescheduleBack').href = 'appointment.html?id=' + encodeURIComponent(b.id);
+
+            renderServices();
+            renderSummary();
+            renderConfirm();
+            if (state.date) loadMonth();
+            else renderCalendar();
+            goStep(3);
+          })
+          .catch(function (err) {
+            // Записи нет или она не наша: показываем ошибку и возвращаем в кабинет.
+            var el = $('error');
+            el.textContent = err.status === 400
+              ? (err.message || 'Эту запись нельзя перенести.')
+              : 'Не удалось открыть запись для переноса. Проверьте ссылку или вернитесь в кабинет.';
+            el.hidden = false;
+            if (err.status === 401) { authLinks(); window.location.href = $('gateLogin').href; }
+          });
+      }
+
+      // Сброс выбора, который относится к прежнему набору услуг или мастеру
+      function resetPick() {
+        state.date = null;
+        state.slot = null;
+        stopTimer();
+        releaseHold();
+        hideConflict();
+        state.slots = null;
+        state.monthDays = [];
+        // Ответы по прежнему мастеру или набору услуг больше не нужны
+        state.monthReq++;
+        state.slotsReq++;
+        state.slotsLoading = false;
+        state.monthLoading = false;
+      }
+
+      function toggleService(id) {
+        var at = state.serviceIds.indexOf(id);
+        if (at === -1) state.serviceIds.push(id);
+        else state.serviceIds.splice(at, 1);
+        // Мастер, дата и слот относятся к прежнему набору услуг — сбрасываем
+        state.master = null;
+        resetPick();
         renderServices();
+        renderSummary();
+        renderCalendar();
+        saveDraft();
+        if (!state.serviceIds.length) { $('masterList').innerHTML = ''; goStep(1); return; }
+        loadMasters().then(function () { renderConfirm(); });
+      }
+
+      function selectMaster(id) {
+        var found = state.masters.filter(function (m) { return m.id === id; })[0];
+        if (!found || masterMissing(found).length) return; // несовместимый не выбираем
+        state.master = found;
+        resetPick();
         renderMasters();
         renderSummary();
-        if (state.service) goStep(2);
+        saveDraft();
+        loadMonth();
       }
 
       $('serviceList').addEventListener('click', function (e) {
         var btn = e.target.closest('[data-service]');
-        if (btn) selectService(Number(btn.dataset.service));
+        if (btn) toggleService(Number(btn.dataset.service));
       });
 
       $('masterList').addEventListener('click', function (e) {
         var btn = e.target.closest('[data-master]');
-        if (!btn) return;
-        state.master = state.masters.filter(function (m) { return m.id === Number(btn.dataset.master); })[0] || null;
-        state.date = null; state.slot = null; state.hold = null;
-        renderMasters();
-        renderSummary();
-        goStep(3);
+        if (!btn || btn.disabled) return;
+        selectMaster(Number(btn.dataset.master));
       });
 
-      $('calendar').addEventListener('click', function (e) {
-        var btn = e.target.closest('[data-date]');
-        if (!btn || btn.disabled) return;
-        state.date = btn.dataset.date;
-        state.slot = null; state.hold = null;
-        renderCalendar();
-        renderSummary();
+      $('toMaster').addEventListener('click', function () {
+        if (!state.serviceIds.length) return;
+        goStep(2);
+        if (!$('masterList').children.length) loadMasters();
+      });
+
+      $('toDate').addEventListener('click', function () {
+        if (!state.master) return;
+        if (!state.date) { goStep(3); if (!state.monthDays.length) loadMonth(); return; }
         goStep(4);
         loadSlots();
       });
 
-      $('slotList').addEventListener('click', function (e) {
-        var btn = e.target.closest('[data-slot]');
-        if (!btn) return;
-        state.slot = { starts_at: btn.dataset.slot };
-        $('slotList').querySelectorAll('.slot').forEach(function (b) {
-          b.classList.toggle('is-selected', b === btn);
-        });
-        $('chooseTime').disabled = false;
-        renderSummary();
+      // Пройденные шаги индикатора кликабельны
+      $('stepper').addEventListener('click', function (e) {
+        var btn = e.target.closest('.stepper__step');
+        if (!btn || btn.disabled) return;
+        var n = Number(btn.dataset.step);
+        goStep(n);
+        if (n === 3 && !state.monthDays.length) loadMonth();
+        if (n === 4 && state.master && state.date) loadSlots();
+        if (n === 5) renderConfirm();
       });
 
+      // Месяц назад/вперёд: календарь перерисовывается, выбранная дата сбрасывается
+      function gotoMonth(n) {
+        shiftMonth(n);
+        state.date = null;
+        state.slot = null;
+        state.hold = null;
+        saveDraft();
+        loadMonth();
+      }
+
+      function retryMonth() { loadMonth(); }
+      function retrySlots() { loadSlots(); }
+
+      $('monthPrev').addEventListener('click', function () { gotoMonth(-1); });
+      $('monthNext').addEventListener('click', function () { gotoMonth(1); });
+
+      // День выбирается в календаре и в подсказке «Перейти на …» блока 03a
+      function pickDate(iso) {
+        state.date = iso;
+        state.slot = null;
+        state.hold = null;
+        // Дата может лежать в соседнем месяце — тогда догружаем его
+        if (iso.slice(0, 7) !== state.month) {
+          state.month = iso.slice(0, 7);
+          loadMonth();
+        } else {
+          renderCalendar();
+        }
+        renderSummary();
+        saveDraft();
+        goStep(4);
+        loadSlots();
+      }
+
+      $('calendar').addEventListener('click', function (e) {
+        if (e.target.closest('#monthRetry')) { retryMonth(); return; }
+        var btn = e.target.closest('[data-date]');
+        if (!btn || btn.disabled) return;
+        pickDate(btn.dataset.date);
+      });
+
+      // Кнопки внутри блока «свободных окон нет»: переход на соседний день с
+      // окнами, следующий месяц, повтор загрузки. Блок живёт под сеткой, но
+      // обработчик тот же, что и у состояния загрузки/ошибки над ней.
+      function slotAuxClick(e) {
+        var date = e.target.closest('[data-date]');
+        if (date) { pickDate(date.dataset.date); return; }
+        if (e.target.closest('#nextMonthHint')) { gotoMonth(1); return; }
+        if (e.target.closest('#slotsRetry')) { retrySlots(); }
+      }
+
+      $('slotState').addEventListener('click', slotAuxClick);
+      $('slotNote').addEventListener('click', slotAuxClick);
+
+      $('slotList').addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-slot]');
+        if (!btn || btn.disabled) return;
+        state.slot = { starts_at: btn.dataset.slot };
+        // Перерисовываем сетку из ответа сервера: подсветка выбранного окна и
+        // строка с временем окончания визита
+        renderSlots();
+        renderSummary();
+        saveDraft();
+      });
+
+      // С шага «Время» на подтверждение: удержание запрашивается при входе на
+      // экран подтверждения (Booking 04), а не здесь — клиент может ещё
+      // передумать и вернуться по «Изменить».
       $('chooseTime').addEventListener('click', function () {
         if (!state.slot) return;
         window.ui.clear();
-        var btn = $('chooseTime');
-        btn.disabled = true;
-        // Удержание слота на 10 минут — карта экранов, шаг «Время»
-        window.api.request('/api/holds', {
-          method: 'POST',
-          json: { master_id: state.master.id, starts_at: state.slot.starts_at, service_ids: [state.service.id] }
-        }).then(function (d) {
-          state.hold = d;
-          $('holdNote').textContent = 'Слот удерживаем до ' + window.api.hour(d.expires_at) +
-            '. Запись нужно подтвердить за это время.';
-          renderSummary();
-          goStep(5);
-        }).catch(function (err) {
-          btn.disabled = false;
-          state.slot = null;
-          renderConflict(err);
-          loadSlots();
-        });
+        goStep(5);
       });
 
-      $('submitBooking').addEventListener('click', function () {
+      $('confirmForm').addEventListener('submit', function (e) {
+        e.preventDefault();
+        // Режим переноса: контактов в форме нет, отправляем только PATCH.
+        if (state.reschedule) { submitReschedule(); return; }
         if (!state.hold) { goStep(4); return; }
+        var name = $('clientName').value.trim();
+        var phone = phoneDigits($('clientPhone').value);
+        fieldError('fieldName', name ? '' : 'Введите имя');
+        fieldError('fieldPhone', phone ? '' : 'Введите телефон');
+        if (!name || !phone) return;
+
         window.ui.clear();
         var btn = $('submitBooking');
         btn.disabled = true;
-        window.api.request('/api/bookings', {
-          method: 'POST',
-          json: {
-            service_id: state.service.id,
-            master_id: state.master.id,
-            starts_at: state.hold.starts_at,
-            hold_token: state.hold.token
-          }
+        // Контакты шлём только если клиент их правил: PATCH без изменений —
+        // лишняя запись в БД и лишний ответ, который надо обработать.
+        var patch = {};
+        if (name !== state.contactName) patch.name = name;
+        if (phone !== state.contactPhone) patch.phone = phone;
+        var saved = Object.keys(patch).length
+          ? window.api.request('/api/auth/me', { method: 'PATCH', json: patch })
+          : Promise.resolve(null);
+
+        saved.then(function (d) {
+          if (d && d.user) { state.user = d.user; state.contactName = name; state.contactPhone = phone; }
+          return window.api.request('/api/bookings', {
+            method: 'POST',
+            json: {
+              service_ids: state.serviceIds.slice(),
+              master_id: state.master.id,
+              starts_at: state.hold.starts_at,
+              hold_token: state.hold.token
+            }
+          });
         }).then(function (d) {
+          stopTimer();
+          window.store.clear(); // выбор отработал — черновик не нужен
           window.location.href = 'success.html?booking=' + d.booking.id;
         }).catch(function (err) {
           btn.disabled = false;
           if (err.status === 401) { authLinks(); window.location.href = $('gateLogin').href; return; }
+          // Телефон занят другим клиентом: подсвечиваем поле, текст — из ответа
+          if (err.code === 'PHONE_TAKEN') { fieldError('fieldPhone', err.message); return; }
+          if (err.status === 400 && err.code) { fieldError('fieldPhone', err.message); return; }
           // Удержание истекло — слот надо выбрать заново
           if (err.code === 'HOLD_EXPIRED' || err.code === 'HOLD_NOT_FOUND' || err.code === 'HOLD_INACTIVE') {
             state.hold = null;
-            state.slot = null;
-            $('holdNote').textContent = '';
-            goStep(4);
-            loadSlots();
+            holdView(-1);
+            renderConfirm();
             return;
           }
-          renderConflict(err);
+          // Слот заняли в обход удержания: Booking 04b
+          if (err.status === 409) {
+            state.hold = null;
+            holdView(-1);
+            renderConfirm();
+            renderConflict(err);
+            return;
+          }
+          // Остальное уже показано общим #error текстом ответа API
         });
       });
 
+      // Перенос подтверждается PATCH той же записи: услуги и мастер не
+      // меняются, поэтому в запросе только новое время. Конфликт 409 и
+      // nearest_free обрабатываются тем же блоком, что и Booking 04b.
+      function submitReschedule() {
+        if (!state.slot) { goStep(4); return; }
+        window.ui.clear();
+        var btn = $('submitBooking');
+        btn.disabled = true;
+        window.api.request('/api/bookings/' + encodeURIComponent(state.reschedule.id), {
+          method: 'PATCH',
+          json: { starts_at: state.slot.starts_at }
+        }).then(function (d) {
+          window.location.href = 'appointment.html?id=' + encodeURIComponent(d.booking.id) + '&moved=1';
+        }).catch(function (err) {
+          btn.disabled = false;
+          if (err.status === 401) { authLinks(); window.location.href = $('gateLogin').href; return; }
+          // Время заняли между показом сетки и подтверждением — тот же конфликт,
+          // что при создании записи: предлагаем ближайшие свободные окна.
+          if (err.status === 409) {
+            state.slot = null;
+            renderSlots();
+            renderSummary();
+            renderConfirm();
+            renderConflict(err);
+            return;
+          }
+          // Запись перестала быть активной (отменена/выполнена) — назад в кабинет.
+          if (err.status === 400 && err.code === 'BOOKING_NOT_MOVABLE') {
+            window.ui.error('Эту запись уже нельзя перенести.');
+            return;
+          }
+          // Остальное уже показано общим #error текстом ответа API
+        });
+      }
+
+      // «Изменить» в сводке: возвращаем на нужный шаг (карта экранов, №5–№8)
       document.addEventListener('click', function (e) {
+        var go = e.target.closest('[data-go]');
+        if (go) { goStep(Number(go.dataset.go)); return; }
+        var slotBtn = e.target.closest('#conflictSlots [data-slot]');
+        if (slotBtn) { pickSuggested(slotBtn.dataset.slot); return; }
         var back = e.target.closest('[data-back]');
         if (back) goStep(Number(back.dataset.back));
       });
 
-      function start() {
-        var deep = new URLSearchParams(window.location.search).get('service');
+      $('conflictOther').addEventListener('click', function () {
+        hideConflict();
+        goStep(4);
+        loadSlots();
+      });
 
-        window.api.request('/api/studio')
-          .then(function (d) {
-            state.workdays = (d.studio.work_hours || []).map(function (w) { return w.weekday; });
-            renderCalendar();
-          })
-          .catch(function () { renderCalendar(); });
+      // Маска телефона по ходу ввода, как в прототипе
+      $('clientPhone').addEventListener('input', function (e) {
+        var at = e.target.selectionStart;
+        var before = e.target.value.length;
+        e.target.value = maskPhone(e.target.value);
+        var after = e.target.value.length;
+        if (typeof at === 'number') e.target.setSelectionRange(at + (after - before), at + (after - before));
+      });
+
+      // Восстанавливаем выбор клиента из sessionStorage и встаём на самый
+      // дальний шаг, до которого выбор позволяет дойти
+      function restore() {
+        var draft = window.store.load();
+        if (draft.service_ids.length) state.serviceIds = draft.service_ids;
+        state.date = draft.date;
+        state.slot = draft.starts_at ? { starts_at: draft.starts_at } : null;
+        state.savedMasterId = draft.master_id;
+        if (state.date && window.api.todaySalon() > state.date) { state.date = null; state.slot = null; }
+        // Календарь открываем на месяце восстановленной даты, а не на текущем
+        if (state.date) state.month = state.date.slice(0, 7);
+        // Есть ли уже свой выбор: услуга из адреса не должна воскресить
+        // снятую клиентом услугу при перезагрузке страницы
+        return draft.service_ids.length > 0;
+      }
+
+      // Услуга с лендинга (?service=<id>) добавляется к выбору только при
+      // первом заходе: дальше выбор меняет сам клиент, и снятая им услуга
+      // не должна воскресать при перезагрузке страницы
+      function applyDeepService(deep, hasDraft) {
+        if (!deep || hasDraft) return false;
+        if (state.serviceIds.indexOf(Number(deep)) !== -1) return false;
+        var exists = state.services.some(function (s) { return String(s.id) === deep; });
+        if (!exists) return false;
+        state.serviceIds.push(Number(deep));
+        // Выбор сразу попадает в черновик, а услуга убирается из адреса
+        saveDraft();
+        window.history.replaceState(null, '', window.location.pathname);
+        return true;
+      }
+
+      function start() {
+        var params = new URLSearchParams(window.location.search);
+        var deep = params.get('service');
+        var rescheduleId = Number(params.get('booking')) || 0;
 
         window.api.request('/api/services')
           .then(function (d) {
             state.services = d.services;
+            // Режим переноса: выбор задаёт существующая запись, услуга из
+            // адреса и черновик новой записи здесь не участвуют.
+            if (rescheduleId) { enterReschedule(rescheduleId); return; }
+            applyDeepService(deep, restore());
             renderServices();
-            if (deep) {
-              var wanted = state.services.filter(function (s) { return String(s.id) === deep; })[0];
-              if (wanted) selectService(wanted.id);
-            }
+            renderSummary();
+            if (!state.serviceIds.length) { goStep(1); return; }
+            loadMasters().then(function () {
+              // Календарь показывает свободные дни конкретного мастера, поэтому
+              // грузится только когда мастер уже выбран
+              if (state.master) loadMonth();
+              else renderCalendar();
+              if (state.master && state.date) { goStep(4); loadSlots(); }
+              else if (state.master) goStep(3);
+              else goStep(2);
+              renderConfirm();
+            });
           })
           .catch(function () {
             $('serviceList').innerHTML = '<p class="stub">Не удалось загрузить услуги. Попробуйте позже.</p>';
           });
-
-        window.api.request('/api/masters')
-          .then(function (d) {
-            state.masters = d.masters;
-            renderMasters();
-          });
-
-        // Телефон клиента виден только в его записях — берём оттуда
-        window.api.request('/api/bookings')
-          .then(function (d) {
-            var first = d.bookings && d.bookings[0];
-            state.phone = first && first.client ? first.client.phone : null;
-            renderContacts();
-          })
-          .catch(function () { renderContacts(); });
-
-        goStep(1);
       }
 
       // Ссылки входа/регистрации с возвратом на эту страницу (с выбранной
@@ -476,8 +1376,13 @@
           return;
         }
         state.user = user;
+        // Контакты для формы подтверждения (Booking 04) — из /api/auth/me.
+        // Телефон не берём из записей: у клиента без записей он был бы
+        // пустым, хотя в профиле уже указан.
+        state.contactName = user.client_name || user.username || '';
+        state.contactPhone = user.client_phone || '';
         $('flow').hidden = false;
-        renderContacts();
+        renderConfirm();
         start();
       });
     })();

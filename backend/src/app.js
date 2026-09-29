@@ -66,7 +66,11 @@ app.use((err, req, res, next) => {
   const message = status >= 500
     ? 'Внутренняя ошибка сервера.'
     : (err.message || 'Ошибка запроса.');
-  res.status(status).json({ error: { message } });
+  // Машиночитаемый код отдаём только для клиентских ошибок, которые его положили
+  // (валидаторы, маршруты): фронт различает по нему HOLD_EXPIRED, SLOT_CONFLICT и т.п.
+  const body = { error: { message } };
+  if (status < 500 && typeof err.code === 'string') body.error.code = err.code;
+  res.status(status).json(body);
 });
 
 module.exports = app;

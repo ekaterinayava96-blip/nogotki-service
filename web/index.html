@@ -219,6 +219,16 @@
             '</div>' +
           '</article>';
         }).join('');
+        // Каталог: выбор нескольких услуг с переходом в запись
+        host.insertAdjacentHTML('beforeend',
+          '<div class="card-service">' +
+            '<h3 class="card-service__title">Несколько услуг сразу</h3>' +
+            '<p class="card-service__desc">Отметьте нужные услуги в каталоге — мастера подберутся, ' +
+              'сумма и время пересчитаются. Дальше останется выбрать дату и время.</p>' +
+            '<div class="card-service__actions">' +
+              '<a class="btn btn--secondary btn--block" href="catalog.html">Открыть каталог услуг</a>' +
+            '</div>' +
+          '</div>');
       }
 
       function renderMasters(masters) {

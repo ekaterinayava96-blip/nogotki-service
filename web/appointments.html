@@ -20,6 +20,7 @@
       <p class="hint" id="greet" style="margin: var(--space-2) 0 var(--space-6); color: var(--color-text-muted)"></p>
 
       <div id="error" class="alert alert--error" hidden></div>
+      <div id="ok" class="alert alert--success" hidden></div>
 
       <div id="loading">
         <div class="skeleton skel-card"></div>
@@ -27,10 +28,23 @@
         <div class="skeleton skel-card" style="margin-top: var(--space-4)"></div>
       </div>
 
-      <div id="list"></div>
+      <!-- Вкладки «Активные / История». Начальная вкладка приходит из адреса
+           (?tab=history), чтобы со ссылок можно было открыть нужную сразу. -->
+      <div class="tabs" id="tabs" role="tablist" aria-label="Записи" hidden>
+        <button type="button" class="tabs__tab" id="tabActive" role="tab" data-tab="active" aria-selected="true" aria-controls="list">
+          Активные <span class="tabs__count" id="countActive">0</span>
+        </button>
+        <button type="button" class="tabs__tab" id="tabHistory" role="tab" data-tab="history" aria-selected="false" aria-controls="list">
+          История <span class="tabs__count" id="countHistory">0</span>
+        </button>
+      </div>
 
+      <div id="list" role="tabpanel" aria-labelledby="tabActive"></div>
+
+      <!-- Пустое состояние — состояние вкладки, а не отдельная страница: текст
+           и кнопка «Записаться» есть у каждой вкладки свои. -->
       <div id="empty" class="empty-state" hidden>
-        <p>Записей нет — выберите услугу</p>
+        <p id="emptyText">Записей нет — выберите услугу</p>
         <a class="btn btn--primary btn--md" href="booking.html">Записаться</a>
         <a class="btn btn--ghost btn--md" href="index.html#services">Услуги и цены</a>
       </div>
@@ -38,36 +52,146 @@
   </main>
 
   <script src="js/api.js"></script>
+  <script src="js/cancel.js"></script>
   <script src="js/header.js"></script>
   <script>
     (function () {
       var list = document.getElementById('list');
       var empty = document.getElementById('empty');
+      var emptyText = document.getElementById('emptyText');
       var loading = document.getElementById('loading');
+      var tabs = document.getElementById('tabs');
+
+      var ACTIVE_STATUSES = ['wait', 'confirmed'];
+      var state = { tab: 'active', bookings: [], loaded: false, nextId: null };
 
       function hideLoading() { loading.hidden = true; }
 
-      function render(bookings) {
-        hideLoading();
-        if (!bookings.length) { empty.hidden = false; return; }
-        empty.hidden = true;
-        list.innerHTML = bookings.map(function (b) {
-          var badge = 'badge--' + (window.BOOKING_STATUS[b.status] ? b.status : 'wait');
-          var label = window.BOOKING_STATUS[b.status] || b.status;
-          return '<div class="booking-card">' +
-            '<div class="booking-card__head">' +
-              '<span class="booking-card__date">' + window.api.fmt(b.starts_at) +
-                '—' + window.api.hour(b.ends_at) + '</span>' +
-              '<span class="badge ' + badge + '">' + window.api.esc(label) + '</span>' +
-            '</div>' +
-            '<div class="booking-card__service">' + window.api.esc(b.service.name) + '</div>' +
-            '<div class="booking-card__meta">' +
-              window.api.esc(b.master.name) + ' · <span class="booking-card__price">' +
-              window.api.rub(b.service.price_kopecks) + '</span>' +
-            '</div>' +
-          '</div>';
-        }).join('');
+      // «Активная» = запись ещё впереди и не отменена. Всё остальное (прошедшая,
+      // выполненная, отменённая) — история, поэтому счётчики вкладок всегда
+      // дополняют друг друга.
+      function isActive(b) {
+        return ACTIVE_STATUSES.indexOf(b.status) !== -1 && new Date(b.starts_at).getTime() > Date.now();
       }
+
+      function byTime(a, b) { return new Date(a.starts_at) - new Date(b.starts_at); }
+
+      function activeList() {
+        return state.bookings.filter(isActive).sort(byTime);
+      }
+
+      function historyList() {
+        return state.bookings.filter(function (b) { return !isActive(b); })
+          .sort(function (a, b) { return byTime(b, a); }); // новые сверху
+      }
+
+      function statusLabel(b) {
+        return window.BOOKING_STATUS[b.status] || b.status;
+      }
+
+      // «Через 2 ч 30 мин» для ближайшего визита: клиенту важнее понимать
+      // «когда», чем читать абсолютную дату.
+      function untilText(iso) {
+        var min = Math.max(1, Math.round((new Date(iso).getTime() - Date.now()) / 60000));
+        var h = Math.floor(min / 60);
+        var d = Math.floor(h / 24);
+        if (d >= 1) return d + (d === 1 ? ' день' : d < 5 ? ' дня' : ' дней') + (h % 24 ? ' ' + (h % 24) + ' ч' : '');
+        if (h >= 1) return h + (h === 1 ? ' час' : h < 5 ? ' часа' : ' часов') + (min % 60 ? ' ' + (min % 60) + ' мин' : '');
+        return min + ' мин';
+      }
+
+      function cardHtml(b, isNext) {
+        var services = window.api.servicesOf(b);
+        var past = !isActive(b);
+        return '<article class="booking-card' + (isNext ? ' booking-card--next' : '') + (past ? ' booking-card--past' : '') + '">' +
+          '<div class="booking-card__head">' +
+            '<span class="booking-card__date">' + window.api.fmt(b.starts_at) +
+              '—' + window.api.hour(b.ends_at) + '</span>' +
+            '<span class="badge badge--' + window.api.esc(b.status) + '">' + window.api.esc(statusLabel(b)) + '</span>' +
+          '</div>' +
+          '<div class="booking-card__flags">' +
+            (isNext ? '<span class="booking-card__flag">Ближайший визит</span>' : '') +
+            (past ? '' : '<span class="booking-card__countdown">через ' + untilText(b.starts_at) + '</span>') +
+          '</div>' +
+          '<div class="booking-card__service">' + window.api.esc(services.names) + '</div>' +
+          '<div class="booking-card__meta">' +
+            window.api.esc(b.master.name) + ' · <span class="booking-card__price">' +
+            window.api.rub(services.price) + '</span> · ' + window.api.duration(services.minutes) +
+          '</div>' +
+          actionsHtml(b, isNext) +
+        '</article>';
+      }
+
+      // Действия есть только у активной записи: у прошедшей или отменённой
+      // перенос и отмена бессмысленны, поэтому кнопок в карточке нет.
+      function actionsHtml(b) {
+        if (!isActive(b)) return '';
+        return '<div class="booking-card__actions">' +
+          '<a class="btn btn--secondary btn--sm" href="appointment.html?id=' + encodeURIComponent(b.id) + '">Подробнее</a>' +
+          '<a class="btn btn--ghost btn--sm" href="booking.html?booking=' + encodeURIComponent(b.id) + '">Перенести</a>' +
+          '<button type="button" class="btn btn--ghost btn--sm" data-cancel="' + encodeURIComponent(b.id) + '">Отменить</button>' +
+          '</div>';
+      }
+
+      function render() {
+        hideLoading();
+        tabs.hidden = false;
+        var items = state.tab === 'active' ? activeList() : historyList();
+        document.getElementById('countActive').textContent = activeList().length;
+        document.getElementById('countHistory').textContent = historyList().length;
+
+        document.getElementById('tabActive').setAttribute('aria-selected', state.tab === 'active' ? 'true' : 'false');
+        document.getElementById('tabHistory').setAttribute('aria-selected', state.tab === 'history' ? 'true' : 'false');
+        document.getElementById('tabActive').setAttribute('aria-controls', 'list');
+        document.getElementById('tabHistory').setAttribute('aria-controls', 'list');
+        document.getElementById('list').setAttribute('aria-labelledby', state.tab === 'active' ? 'tabActive' : 'tabHistory');
+
+        if (!items.length) {
+          list.innerHTML = '';
+          // Своё пустое состояние у каждой вкладки: «нет визитов» и «нет истории»
+          // — разные ситуации, и в истории кнопка «Записаться» тоже уместна.
+          emptyText.textContent = state.tab === 'active'
+            ? 'Активных записей нет — выберите услугу'
+            : 'История пуста: здесь появятся прошлые и отменённые записи';
+          empty.hidden = false;
+          return;
+        }
+        empty.hidden = true;
+        list.innerHTML = items.map(function (b, i) { return cardHtml(b, state.tab === 'active' && i === 0); }).join('');
+      }
+
+      function setTab(tab) {
+        state.tab = tab === 'history' ? 'history' : 'active';
+        // Вкладка — состояние страницы, а не экран: ей можно поделиться ссылкой.
+        window.history.replaceState(null, '', 'appointments.html?tab=' + state.tab);
+        render();
+      }
+
+      tabs.addEventListener('click', function (e) {
+        var btn = e.target.closest('.tabs__tab');
+        if (btn) setTab(btn.dataset.tab);
+      });
+
+      // Клик по «Отменить» открывает модалку из js/cancel.js: правило и
+      // предупреждение о поздней отмене живут там, а не дублируются здесь.
+      list.addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-cancel]');
+        if (!btn) return;
+        var id = Number(btn.dataset.cancel);
+        var booking = state.bookings.filter(function (b) { return b.id === id; })[0];
+        if (!booking) return;
+        window.cancelBooking.open(booking, {
+          onDone: function (updated) {
+            // Заменяем запись в массиве по id: перерисовка после отмены должна
+            // показать её уже в истории, а не удалять совсем.
+            state.bookings = state.bookings.map(function (b) { return b.id === updated.id ? updated : b; });
+            window.ui.ok('Запись отменена. Слот освободился для других клиентов.');
+            render();
+            if (state.tab === 'active' && updated.status === 'canceled') setTab('history');
+          },
+          onError: function () { load(); }
+        });
+      });
 
       function showError(msg) {
         hideLoading();
@@ -80,7 +204,12 @@
 
       function load() {
         window.api.request('/api/bookings').then(function (r) {
-          render(r.bookings || []);
+          state.bookings = r.bookings || [];
+          state.loaded = true;
+          // Ближайшая активная запись считается один раз на загрузку: после
+          // отмены карточка уходит в историю, а вкладка не должна «прыгать».
+          state.nextId = (activeList()[0] || {}).id || null;
+          render();
         }).catch(function (err) {
           if (err.status === 401) { window.location.replace('login.html'); return; }
           showError(err.message);
@@ -95,6 +224,7 @@
         if (greet && name) greet.textContent = 'Здравствуйте, ' + name + '! Ваши записи и их статусы:';
       });
 
+      state.tab = new URLSearchParams(window.location.search).get('tab') === 'history' ? 'history' : 'active';
       load();
     })();
   </script>

@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Запись — Ноготочки</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="tokens.css" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+
+  <div id="global-header"></div>
+
+  <main class="container">
+    <section style="padding: var(--space-7) 0">
+      <a class="linklike booking-detail__back" href="appointments.html">← Все записи</a>
+      <h1 id="title" style="margin-bottom: var(--space-5)">Запись</h1>
+
+      <div id="error" class="alert alert--error" hidden></div>
+      <div id="ok" class="alert alert--success" hidden></div>
+
+      <div id="loading">
+        <div class="skeleton skel-card"></div>
+      </div>
+
+      <div class="panel booking-detail" id="detail" hidden></div>
+    </section>
+  </main>
+
+  <script src="js/api.js"></script>
+  <script src="js/cancel.js"></script>
+  <script src="js/header.js"></script>
+  <script>
+    (function () {
+      var detail = document.getElementById('detail');
+      var loading = document.getElementById('loading');
+      var id = Number(new URLSearchParams(window.location.search).get('id'));
+      var moved = new URLSearchParams(window.location.search).get('moved') === '1';
+      var current = null; // загруженная запись: её показываем и её отменяем
+      var ACTIVE_STATUSES = ['wait', 'confirmed'];
+
+      function isActive(b) {
+        return ACTIVE_STATUSES.indexOf(b.status) !== -1 && new Date(b.starts_at).getTime() > Date.now();
+      }
+
+      function row(label, value) {
+        return '<div class="summary__row"><dt>' + label + '</dt><dd>' + value + '</dd></div>';
+      }
+
+      function hoursLeftText(iso) {
+        var min = Math.max(1, Math.round((new Date(iso).getTime() - Date.now()) / 60000));
+        var h = Math.floor(min / 60);
+        return h >= 1 ? h + ' ч' + (min % 60 ? ' ' + (min % 60) + ' мин' : '') : min + ' мин';
+      }
+
+      function render(b) {
+        current = b;
+        loading.hidden = true;
+        detail.hidden = false;
+        var services = window.api.servicesOf(b);
+        var active = isActive(b);
+        document.getElementById('title').textContent = 'Запись на ' + window.api.day(b.starts_at);
+        // Возврат из переноса (?moved=1): подтверждаем, что время действительно
+        // новое, а не просто вернулись на ту же карточку.
+        if (moved) { window.ui.ok('Запись перенесена на ' + window.api.fmt(b.starts_at) + '.'); moved = false; }
+
+        detail.innerHTML =
+          '<div class="booking-card__head">' +
+            '<span class="booking-card__date">' + window.api.fmt(b.starts_at) + '—' + window.api.hour(b.ends_at) + '</span>' +
+            '<span class="badge badge--' + window.api.esc(b.status) + '">' +
+              window.api.esc(window.BOOKING_STATUS[b.status] || b.status) + '</span>' +
+          '</div>' +
+          '<div class="summary">' +
+            row('Услуги', window.api.esc(services.names)) +
+            row('Длительность', window.api.duration(services.minutes)) +
+            row('Стоимость', window.api.rub(services.price)) +
+            row('Мастер', window.api.esc(b.master.name) + (b.master.role ? ', ' + window.api.esc(b.master.role) : '')) +
+            row('Записаны на', window.api.esc(b.client.name || '—') + (b.client.phone ? '<br>' + window.api.esc(b.client.phone) : '')) +
+            (b.comment ? row('Комментарий', window.api.esc(b.comment)) : '') +
+            (b.created_at ? row('Создана', window.api.fmt(b.created_at)) : '') +
+          '</div>' +
+          (active
+            // Правило отмены видно сразу на экране деталей, а не только в
+            // модалке: клиент должен понимать, сколько осталось на решение.
+            ? '<div class="rules" id="rulesBox"></div>'
+            : '<div class="alert alert--warning">Запись ' +
+                (b.status === 'canceled' ? 'отменена' : 'уже состоялась') +
+                ' — перенос и отмена недоступны.</div>') +
+          actionsHtml(b, active) +
+        '</div>';
+
+        if (active) renderRules(b);
+      }
+
+      // Текст правил на деталях и в модалке должен совпадать, поэтому берём его
+      // из того же policy(), а не пишем второй раз здесь.
+      function renderRules(b) {
+        window.cancelBooking.studioPolicy().then(function (p) {
+          var r = window.cancelBooking.policy(b, p.hours);
+          var box = document.getElementById('rulesBox');
+          if (!box) return;
+          box.innerHTML =
+            '<p class="rules__line">До визита ' + hoursLeftText(b.starts_at) + '.</p>' +
+            '<p class="rules__line">' + window.api.esc(r.text) + '</p>' +
+            (r.warn ? '<p class="rules__line rules__warn">' + window.api.esc(r.warn) + '</p>' : '') +
+            (p.studio && p.studio.phone ? '<p class="rules__line">Телефон студии: ' + window.api.esc(p.studio.phone) + '</p>' : '');
+        });
+      }
+
+      function actionsHtml(b, active) {
+        if (!active) return '';
+        return '<div class="booking-detail__actions">' +
+          '<a class="btn btn--primary btn--md" href="booking.html?booking=' + encodeURIComponent(b.id) + '">Перенести</a>' +
+          '<button type="button" class="btn btn--ghost btn--md" id="cancelBtn">Отменить запись</button>' +
+          '</div>';
+      }
+
+      function showError(msg) {
+        loading.hidden = true;
+        detail.hidden = true;
+        var el = document.getElementById('error');
+        el.textContent = msg;
+        el.hidden = false;
+      }
+
+      function load() {
+        if (!id) { showError('Не указан номер записи.'); return; }
+        window.api.request('/api/bookings/' + encodeURIComponent(id)).then(function (r) {
+          render(r.booking);
+        }).catch(function (err) {
+          if (err.status === 401) { window.location.replace('login.html'); return; }
+          if (err.status === 404 || err.status === 403) {
+            showError('Запись не найдена — возможно, она удалена или принадлежит другому клиенту.');
+            return;
+          }
+          showError(err.message);
+        });
+      }
+
+      // Отмена прямо с экрана деталей: после успеха возвращаемся в список, где
+      // запись уже в истории.
+      document.addEventListener('click', function (e) {
+        if (!e.target.closest('#cancelBtn') || !current) return;
+        window.cancelBooking.open(current, {
+          onDone: function () { window.location.href = 'appointments.html?tab=history'; },
+          onError: function () { load(); }
+        });
+      });
+
+      load();
+    })();
+  </script>
+</body>
+</html>

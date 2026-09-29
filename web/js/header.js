@@ -17,7 +17,7 @@
 
   function render(user) {
     var links =
-      '<a href="index.html#services">Услуги и цены</a>' +
+      '<a href="catalog.html">Услуги и цены</a>' +
       '<a href="index.html#about">О студии</a>' +
       '<a href="appointments.html">Мои записи</a>';
 

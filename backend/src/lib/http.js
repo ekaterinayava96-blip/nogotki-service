@@ -27,7 +27,10 @@ function isBookingTimeConflict(err) {
 }
 
 // Ответ 409 «время занято» + ближайшее свободное время мастера (не наружу текст БД).
-function sendSlotConflict(res, masterId, totalMinutes) {
+// code различают точки отказа: SLOT_BUSY — заняла запись, SLOT_CONFLICT — слот
+// перехватили на удержании. Ближайшие окна клиенту нужны в обоих случаях,
+// поэтому список отдаём всегда.
+function sendSlotConflict(res, masterId, totalMinutes, code = 'SLOT_BUSY') {
   const alternatives = nearestFreeSlots({ masterId, totalMinutes }).map((s) => ({
     starts_at: s.starts_at,
     ends_at: s.ends_at,
@@ -35,7 +38,7 @@ function sendSlotConflict(res, masterId, totalMinutes) {
   return res.status(409).json({
     error: {
       message: 'Это время уже занято. Выберите одно из ближайших свободных:',
-      code: 'SLOT_BUSY',
+      code: code,
       nearest_free: alternatives,
     },
   });

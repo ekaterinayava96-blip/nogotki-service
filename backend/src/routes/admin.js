@@ -47,11 +47,17 @@ router.patch(
       // Триггер trg_bookings_no_overlap_update: смена статуса на активный
       // на пересечении с другой активной записью мастера запрещена.
       if (isBookingTimeConflict(err) && status !== 'canceled') {
-        return sendSlotConflict(res, row.master_id, row.service_duration);
+        // Подсказка «свободное время рядом» считается по длительности всей
+        // записи, а не по одной услуге.
+        const services = q.servicesOfBooking(bookingId);
+        const totalMinutes = services.length
+          ? services.reduce((sum, s) => sum + s.duration_minutes, 0)
+          : row.service_duration;
+        return sendSlotConflict(res, row.master_id, totalMinutes);
       }
       throw err;
     }
-    return res.json({ booking: q.serializeBooking(q.bookingDetail(bookingId)) });
+    return res.json({ booking: q.serializedBooking(bookingId) });
   })
 );
 
@@ -117,7 +123,16 @@ router.delete(
   asyncH(async (req, res) => {
     const id = v.intId(req.params.id, 'id');
     if (!q.serviceById(id)) return res.status(404).json({ error: { message: 'Услуга не найдена.', code: 'NOT_FOUND' } });
-    const hasBookings = db.prepare('SELECT 1 AS hit FROM bookings WHERE service_id = ? LIMIT 1').get(id);
+    // Записи могли остаться на услугу и в составе комплекса (booking_services),
+    // поэтому проверяем оба места — иначе удаление упрётся в FK без понятного
+    // ответа клиенту.
+    const hasBookings = db
+      .prepare(`
+        SELECT 1 AS hit FROM bookings WHERE service_id = ? LIMIT 1`)
+      .get(id)
+      || db
+        .prepare('SELECT 1 AS hit FROM booking_services WHERE service_id = ? LIMIT 1')
+        .get(id);
     if (hasBookings) {
       return res.status(409).json({
         error: { message: 'Нельзя удалить услугу с записями — отключите её.', code: 'SERVICE_IN_USE' },
@@ -298,6 +313,52 @@ router.delete(
     if (!q.workBlockById(id)) return res.status(404).json({ error: { message: 'Блокировка не найдена.', code: 'NOT_FOUND' } });
     q.deleteWorkBlock(id);
     return res.status(204).end();
+  })
+);
+
+// ---------- Настройки студии ----------
+
+// GET /admin/studio — текущие настройки студии (в т.ч. правило бесплатной отмены)
+router.get(
+  '/studio',
+  asyncH(async (req, res) => {
+    const info = q.studioInfo();
+    if (!info) {
+      return res.status(404).json({ error: { message: 'Информация о студии не заполнена.', code: 'NOT_FOUND' } });
+    }
+    return res.json({
+      studio: {
+        id: info.id,
+        studio_name: info.studio_name,
+        address: info.address,
+        phone: info.phone,
+        telegram: info.telegram,
+        map_hint: info.map_hint,
+        free_cancel_hours: Number(info.free_cancel_hours || 0),
+      },
+    });
+  })
+);
+
+// PATCH /admin/studio — смена правила бесплатной отмены.
+// body: { free_cancel_hours: 0..168 } — 0 означает «бесплатной отмены нет».
+// Клиентский кабинет берёт это значение из GET /api/studio, поэтому здесь
+// достаточно только самой настройки без правки констант во фронтенде.
+router.patch(
+  '/studio',
+  asyncH(async (req, res) => {
+    if (req.body.free_cancel_hours === undefined) {
+      return res.status(400).json({
+        error: { message: 'Укажите поле «free_cancel_hours».', code: 'VALIDATION' },
+      });
+    }
+    const hours = v.boundedInt(req.body.free_cancel_hours, 'free_cancel_hours', 0, 168);
+    const info = q.studioInfo();
+    if (!info) {
+      return res.status(404).json({ error: { message: 'Информация о студии не заполнена.', code: 'NOT_FOUND' } });
+    }
+    q.setFreeCancelHours(hours);
+    return res.json({ studio: { free_cancel_hours: hours } });
   })
 );
 

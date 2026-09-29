@@ -339,7 +339,7 @@ section { padding: var(--space-8) 0; }
 
 /* ---------- ЗАПИСЬ: ШАГИ 1–5 ---------- */
 .stepper { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-6); }
-.stepper__step { display: flex; align-items: center; gap: var(--space-2); color: var(--color-text-muted); font-size: var(--font-size-sm); }
+.stepper__step { display: flex; align-items: center; gap: var(--space-2); color: var(--color-text-muted); font: inherit; font-size: var(--font-size-sm); background: none; border: 0; padding: 0; }
 .stepper__num {
   width: var(--space-6); height: var(--space-6); border-radius: var(--radius-full);
   display: inline-flex; align-items: center; justify-content: center;
@@ -348,15 +348,27 @@ section { padding: var(--space-8) 0; }
 }
 .stepper__step.is-active { color: var(--color-text-heading); font-weight: 800; }
 .stepper__step.is-active .stepper__num { background: var(--color-button-primary); color: var(--color-button-primary-text); }
+.stepper__step.is-done { cursor: pointer; }
 .stepper__step.is-done .stepper__num { background: var(--color-success-bg); color: var(--color-success); }
-.stepper__connector { width: var(--space-4); height: 2px; background: var(--color-border-strong); }
+.stepper__step.is-done:hover .stepper__num { background: var(--color-button-primary); color: var(--color-button-primary-text); }
+.stepper__step.is-future { opacity: .5; cursor: default; }
+.stepper__connector { width: var(--space-4); height: 1px; background: var(--color-border-strong); }
 
-.layout--booking { display: grid; grid-template-columns: 1fr 320px; gap: var(--space-6); align-items: start; }
+.layout--booking { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 0.36fr); gap: var(--space-6); align-items: start; }
 .layout--booking > aside { position: sticky; top: calc(var(--space-8) + var(--space-1)); }
 
 .step { display: none; }
 .step.is-visible { display: block; }
 .step__nav { margin-top: var(--space-5); display: flex; gap: var(--space-3); }
+/* Низ шага: слева «Назад», справа итог/подсказка и «Далее» */
+.step__foot {
+  margin-top: var(--space-5); padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-4); flex-wrap: wrap;
+}
+.step__foot-actions { display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; }
+.step__total { font-weight: 800; color: var(--color-text-heading); }
 
 .option {
   display: flex; align-items: center; gap: var(--space-3);
@@ -368,6 +380,19 @@ section { padding: var(--space-8) 0; }
 }
 .option:hover { background: var(--color-bg-subtle); }
 .option.is-selected { border-color: var(--color-button-primary); background: var(--color-bg-subtle); }
+.option.is-disabled { opacity: .55; cursor: not-allowed; background: var(--color-bg-surface); }
+.option.is-disabled:hover { background: var(--color-bg-surface); }
+.option__check {
+  width: var(--space-5); height: var(--space-5); flex-shrink: 0;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-button-primary-text); background: transparent;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: var(--font-size-caption); font-weight: 800;
+}
+.option.is-selected .option__check { background: var(--color-button-primary); border-color: var(--color-button-primary); }
+.option__side { margin-left: auto; text-align: right; white-space: nowrap; }
+.option__note { display: block; margin-top: var(--space-1); font-size: var(--font-size-caption); color: var(--color-text-muted); }
 .option__avatar {
   width: var(--space-7); height: var(--space-7); border-radius: var(--radius-full); flex-shrink: 0;
   background: var(--color-bg-subtle); color: var(--color-button-primary);
@@ -379,31 +404,91 @@ section { padding: var(--space-8) 0; }
 .option__price { margin-left: auto; font-weight: 800; color: var(--color-button-primary); white-space: nowrap; }
 
 .calendar { background: var(--color-bg-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--space-5); }
-.calendar__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-4); }
-.calendar__month { font-weight: 800; color: var(--color-text-heading); }
+.calendar__head { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-4); }
+.calendar__month { flex: 1; text-align: center; font-weight: 800; color: var(--color-text-heading); }
+.calendar__nav {
+  width: var(--space-7); height: var(--space-7); border-radius: var(--radius-full);
+  border: 1px solid var(--color-border-strong); background: var(--color-bg-surface);
+  color: var(--color-button-primary); font: inherit; font-weight: 800; cursor: pointer;
+}
+.calendar__nav:hover:not(:disabled) { background: var(--color-bg-subtle); }
+.calendar__nav:disabled { opacity: .4; cursor: not-allowed; }
 .calendar__grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: var(--space-2); }
 .calendar__wd { text-align: center; font-size: var(--font-size-caption); color: var(--color-text-muted); }
+.calendar__pad { aspect-ratio: 1; }
+.calendar__legend { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-4); font-size: var(--font-size-caption); color: var(--color-text-muted); }
+.calendar__dot { width: 6px; height: 6px; border-radius: var(--radius-full); background: var(--color-success); }
 .day {
-  display: flex; flex-direction: column; align-items: center; gap: var(--space-1);
-  padding: var(--space-2); border-radius: var(--radius-md);
+  position: relative; aspect-ratio: 1;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0; border-radius: var(--radius-md);
   border: 1px solid var(--color-border); background: var(--color-bg-surface);
   font: inherit; color: var(--color-text-primary); cursor: pointer;
 }
 .day:hover:not(:disabled) { background: var(--color-bg-subtle); }
-.day:disabled { opacity: .45; cursor: not-allowed; }
-.day.is-selected { border-color: var(--color-button-primary); background: var(--color-bg-subtle); }
 .day__num { font-weight: 800; }
-.day__wd { font-size: var(--font-size-caption); color: var(--color-text-muted); }
+/* День, в который есть что предложить: точка снизу, как в прототипе */
+.day.is-free { color: var(--color-success); }
+.day.is-free::after {
+  content: ""; position: absolute; bottom: 6px;
+  width: 5px; height: 5px; border-radius: var(--radius-full); background: var(--color-success);
+}
+/* День без свободных окон виден, но недоступен для выбора */
+.day.is-empty, .day.is-off { color: var(--color-text-muted); text-decoration: line-through; }
+.day.is-off { background: var(--color-bg-subtle); }
+.day.is-past { opacity: .45; }
+.day:disabled { cursor: not-allowed; opacity: .5; }
+.day.is-selected { border-color: var(--color-button-primary); background: var(--color-button-primary); color: var(--color-button-primary-text); }
+.day.is-selected::after { background: var(--color-button-primary-text); }
 
-.slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: var(--space-3); margin-bottom: var(--space-5); }
+.slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--space-8), 1fr)); gap: var(--space-3); margin-bottom: var(--space-4); }
 .slot {
   padding: var(--space-3); border-radius: var(--radius-md);
   border: 1px solid var(--color-border-strong);
   background: var(--color-success-bg); color: var(--color-success);
-  font: inherit; font-weight: 800; cursor: pointer;
+  font: inherit; font-weight: 800; text-align: center; cursor: pointer;
 }
-.slot:hover { border-color: var(--color-button-primary); color: var(--color-button-primary); }
+.slot:hover:not(:disabled) { border-color: var(--color-button-primary); color: var(--color-button-primary); }
 .slot.is-selected { background: var(--color-button-primary); color: var(--color-button-primary-text); border-color: var(--color-button-primary); }
+/* Занятое и прошедшее время видно, но выбрать его нельзя */
+.slot.is-busy { background: var(--color-error-bg); color: var(--color-error); border-color: transparent; text-decoration: line-through; cursor: not-allowed; }
+.slot.is-past { background: var(--color-bg-subtle); color: var(--color-text-muted); border-color: transparent; cursor: not-allowed; }
+/* Легенда под сеткой времени: объясняет, почему окно нельзя выбрать */
+.slots__legend {
+  display: flex; flex-wrap: wrap; gap: var(--space-4);
+  margin: 0 0 var(--space-4); font-size: var(--font-size-sm); color: var(--color-text-muted);
+}
+.slots__key { display: inline-flex; align-items: center; gap: var(--space-2); }
+.slots__key::before {
+  content: ''; width: var(--space-4); height: var(--space-4);
+  border-radius: var(--radius-sm); background: var(--color-success-bg);
+  border: 1px solid var(--color-border-strong);
+}
+.slots__key--busy::before { background: var(--color-error-bg); border-color: transparent; text-decoration: line-through; }
+.slots__key--past::before { background: var(--color-bg-subtle); border-color: transparent; }
+.slots__result {
+  margin-bottom: var(--space-5); padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md); background: var(--color-bg-subtle);
+  font-weight: 700; color: var(--color-text-heading);
+}
+
+/* Состояние «свободных окон нет» (Booking 03a) — часть шага «Время» */
+.nofree { margin-bottom: var(--space-5); padding: var(--space-5); border-radius: var(--radius-md); background: var(--color-bg-subtle); }
+.nofree__title { margin: 0 0 var(--space-2); font-weight: 800; color: var(--color-text-heading); }
+.nofree__text { margin: 0 0 var(--space-3); }
+.nofree__nearest { margin: 0 0 var(--space-3); }
+.nofree__hints { margin: var(--space-4) 0 0; padding-left: var(--space-5); color: var(--color-text-muted); font-size: var(--font-size-sm); }
+.nofree__hints li { margin-bottom: var(--space-1); }
+.linklike { border: none; background: none; padding: 0; font: inherit; color: var(--color-button-primary); text-decoration: underline; cursor: pointer; }
+
+/* Пока грузится — индикатор, а не пустая сетка */
+.loading { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-5); color: var(--color-text-muted); }
+.loading__spin {
+  width: var(--space-5); height: var(--space-5); flex-shrink: 0;
+  border: 2px solid var(--color-border); border-top-color: var(--color-button-primary);
+  border-radius: var(--radius-full); animation: loading-spin .8s linear infinite;
+}
+@keyframes loading-spin { to { transform: rotate(360deg); } }
 
 .panel--tint { background: var(--color-bg-subtle); }
 .summary__row { display: flex; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-2); }
@@ -416,10 +501,133 @@ section { padding: var(--space-8) 0; }
 .contacts__label { color: var(--color-text-muted); font-size: var(--font-size-sm); }
 .contacts__value { font-weight: 700; text-align: right; }
 
+/* Сводка визита: значение и «Изменить» рядом, справа прижаты */
+.summary__cell { display: flex; align-items: baseline; justify-content: flex-end; gap: var(--space-3); }
+.summary__cell > span { min-width: 0; }
+.summary__cell .linklike { flex-shrink: 0; font-size: var(--font-size-sm); }
+#sumPrices { margin: 0; }
+#sumPrices .summary__row { margin-bottom: var(--space-1); }
+#sumPrices dt { max-width: 60%; }
+
+/* Таймер удержания слота (Booking 04). Вид меняется на жёлтый меньше минуты */
+.hold {
+  display: flex; align-items: center; gap: var(--space-4);
+  padding: var(--space-4) var(--space-5); margin-bottom: var(--space-5);
+  border-radius: var(--radius-md);
+  background: var(--color-success-bg); color: var(--color-success);
+  font-weight: 700;
+}
+.hold--warn { background: var(--color-warning-bg); color: var(--color-warning); }
+.hold--over { background: var(--color-error-bg); color: var(--color-error); }
+.hold__time { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 800; }
+/* Под минуту цифры мигают — время уходит на глазах */
+.hold--warn .hold__time { animation: hold-tick 1s steps(2, end) infinite; }
+@keyframes hold-tick { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) {
+  .hold--warn .hold__time { animation: none; }
+}
+
+/* ---------- КАБИНЕТ КЛИЕНТА ---------- */
+/* Вкладки «Активные / История» — переключатель состояния, а не навигация:
+   обе вкладки держат счётчики, чтобы пустая вкладка была видна заранее. */
+.tabs {
+  display: inline-flex; gap: var(--space-2); margin-bottom: var(--space-5);
+  padding: var(--space-1); border-radius: var(--radius-full);
+  background: var(--color-bg-subtle);
+}
+.tabs__tab {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-2) var(--space-5); border: 0; border-radius: var(--radius-full);
+  background: transparent; color: var(--color-text-muted);
+  font: inherit; font-weight: 700; font-size: var(--font-size-sm); cursor: pointer;
+}
+.tabs__tab[aria-selected="true"] {
+  background: var(--color-bg-surface); color: var(--color-button-primary);
+  box-shadow: var(--shadow-sm);
+}
+.tabs__count {
+  min-width: 22px; padding: 0 var(--space-2); border-radius: var(--radius-full);
+  background: var(--color-bg-subtle); color: var(--color-text-muted);
+  font-size: var(--font-size-caption); text-align: center;
+}
+.tabs__tab[aria-selected="true"] .tabs__count { background: var(--color-button-primary); color: var(--color-button-primary-text); }
+
+/* Карточка записи в кабинете: тот же .booking-card, но с действиями и
+   пометкой ближайшего визита, поэтому отдельный блок, а не модификатор карточки услуги. */
+.booking-card--next {
+  border-color: var(--color-button-primary);
+  box-shadow: var(--shadow-md);
+}
+.booking-card__flags { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.booking-card__flag {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  padding: var(--space-1) var(--space-3); border-radius: var(--radius-full);
+  background: var(--color-button-primary); color: var(--color-button-primary-text);
+  font-size: var(--font-size-caption); font-weight: 800; white-space: nowrap;
+}
+.booking-card__when { display: flex; align-items: baseline; gap: var(--space-3); flex-wrap: wrap; }
+.booking-card__countdown { color: var(--color-text-muted); font-size: var(--font-size-sm); }
+.booking-card__actions {
+  display: flex; gap: var(--space-3); flex-wrap: wrap;
+  margin-top: var(--space-4); padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+/* У отменённой/выполненной записи действий нет — карточка остаётся справкой. */
+.booking-card--past .booking-card__date { color: var(--color-text-muted); }
+
+/* Режим переноса записи (booking.html?booking=<id>): прежнее время и
+   зафиксированные услуги с мастером показываются явно. */
+.reschedule__old { margin: 0; font-weight: 700; color: var(--color-text-heading); }
+/* [hidden] должен побеждать .step.is-visible и .stepper__step: в переносе
+   шаги 1–2 скрыты, но .is-visible из goStep() их не трогает. */
+[hidden] { display: none !important; }
+
+/* Правило отмены в модалке: обычное состояние и предупреждение «в последний момент» */
+.rules { margin: 0 0 var(--space-4); font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.rules__line { margin: 0 0 var(--space-2); }
+.rules__hour { color: var(--color-text-heading); font-weight: 800; }
+.rules__warn { color: var(--color-warning); font-weight: 700; }
+
+/* Модальное окно подтверждения отмены (разметка приезжает из js/cancel.js) */
+.modal-backdrop {
+  position: fixed; inset: 0; z-index: 60;
+  display: flex; align-items: center; justify-content: center;
+  padding: var(--space-5);
+  background: rgba(42, 30, 36, 0.5);
+}
+body.is-modal-open { overflow: hidden; }
+.modal {
+  width: 100%; max-width: 440px;
+  background: var(--color-bg-surface);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  box-shadow: var(--shadow-md);
+}
+.modal h3 { margin-bottom: var(--space-3); }
+.modal__when { margin: 0 0 var(--space-3); font-weight: 800; color: var(--color-text-heading); }
+.modal__text { margin: 0 0 var(--space-4); color: var(--color-text-muted); font-size: var(--font-size-sm); }
+.modal__actions { display: flex; gap: var(--space-3); justify-content: flex-end; flex-wrap: wrap; }
+.btn:disabled { opacity: .6; cursor: default; box-shadow: none; }
+
+/* Экран деталей записи */
+.booking-detail { display: flex; flex-direction: column; gap: var(--space-4); }
+.booking-detail__actions {
+  display: flex; gap: var(--space-3); flex-wrap: wrap;
+  margin-top: var(--space-5); padding-top: var(--space-5);
+  border-top: 1px solid var(--color-border);
+}
+.booking-detail__back { display: inline-block; margin-bottom: var(--space-4); }
+
 /* ---------- АДАПТИВ ---------- */
 @media (max-width: 767px) {
   .nav__links { display: none; }
   section { padding: var(--space-6) 0; }
-  .layout--booking { grid-template-columns: 1fr; }
+  .layout--booking { grid-template-columns: minmax(0, 1fr); }
   .layout--booking > aside { position: static; }
+  .step__foot { flex-direction: column; align-items: stretch; }
+  .step__foot-actions { justify-content: space-between; }
+  .tabs { display: flex; width: 100%; }
+  .tabs__tab { flex: 1; justify-content: center; }
+  .booking-card__actions .btn, .booking-detail__actions .btn { flex: 1; }
+  .modal__actions .btn { flex: 1; }
 }

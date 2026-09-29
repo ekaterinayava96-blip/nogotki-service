@@ -44,7 +44,9 @@
         return res.json().catch(function () { return null; }).then(function (data) {
           if (!res.ok) {
             var msg = (data && data.error && data.error.message) || ('Ошибка запроса: ' + res.status);
-            if (data && data.error && data.error.code === 'SLOT_BUSY' && Array.isArray(data.error.nearest_free)) {
+            // Ближайшие свободные окна приходят и при 409 на удержание, и при 409
+            // на создание записи — показываем их в тексте ошибки в обоих случаях
+            if (data && data.error && Array.isArray(data.error.nearest_free) && data.error.nearest_free.length) {
               msg = msg + '\n' + data.error.nearest_free
                 .map(function (s) { return window.api.fmt(s.starts_at); })
                 .join(', ');
@@ -65,6 +67,35 @@
     rub: function (kop) {
       var rub = Number(kop || 0) / 100;
       return rub.toFixed(rub % 1 === 0 ? 0 : 2).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' \u20bd';
+    },
+
+    // Минуты -> «1 ч 30 мин» / «40 мин» (длительности приходят с сервера)
+    duration: function (minutes) {
+      var m = Number(minutes || 0);
+      var h = Math.floor(m / 60);
+      var rest = m % 60;
+      if (!h) return rest + ' мин';
+      return h + ' ч' + (rest ? ' ' + rest + ' мин' : '');
+    },
+
+    // Услуги записи. Сервер отдаёт набор services (запись может закрывать
+    // несколько услуг); поле service — первая услуга, остаётся для совместимости
+    // со старыми ответами. Итоги — по набору.
+    servicesOf: function (booking) {
+      var list = booking && Array.isArray(booking.services) && booking.services.length
+        ? booking.services
+        : (booking && booking.service ? [booking.service] : []);
+      var sum = function (field) {
+        return list.reduce(function (acc, s) { return acc + Number(s[field] || 0); }, 0);
+      };
+      return {
+        list: list,
+        names: list.map(function (s) { return s.name; }).join(' + '),
+        minutes: booking && booking.total_duration_minutes !== undefined
+          ? booking.total_duration_minutes : sum('duration_minutes'),
+        price: booking && booking.total_price_kopecks !== undefined
+          ? booking.total_price_kopecks : sum('price_kopecks'),
+      };
     },
 
     // UTC ISO -> время салона «HH:MM»

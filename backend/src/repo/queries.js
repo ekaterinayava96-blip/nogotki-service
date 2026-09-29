@@ -100,6 +100,21 @@ function clientById(id) {
   return db.prepare('SELECT * FROM clients WHERE id = ?').get(Number(id));
 }
 
+// Правка контактов клиента из формы подтверждения записи (Booking 04).
+// undefined означает «поле не передавали, не трогаем» — частичное обновление,
+// чтобы не затирать имя, если клиент поменял только телефон.
+function updateClient(id, { name, phone }) {
+  const sets = [];
+  const params = [];
+  if (name !== undefined) { sets.push('name = ?'); params.push(name); }
+  if (phone !== undefined) { sets.push('phone = ?'); params.push(phone); }
+  if (sets.length) {
+    params.push(Number(id));
+    db.prepare(`UPDATE clients SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+  }
+  return clientById(id);
+}
+
 function listServices({ activeOnly = true } = {}) {
   const where = activeOnly ? 'WHERE is_active = 1' : '';
   return db
@@ -150,7 +165,19 @@ function serviceById(id) {
 
 // Одна строка studio_info (обычно id = 1). null — если сид ещё не засеял.
 function studioInfo() {
-  return db.prepare('SELECT id, studio_name, address, phone, telegram, map_hint, updated_at FROM studio_info ORDER BY id LIMIT 1').get();
+  return db
+    .prepare('SELECT id, studio_name, address, phone, telegram, map_hint, free_cancel_hours, updated_at FROM studio_info ORDER BY id LIMIT 1')
+    .get();
+}
+
+// Правило бесплатной отмены: сколько часов до визита клиент может отменить
+// запись без предупреждения. Пишет владелец через PATCH /admin/studio.
+// Значение из БД всегда wins, DEFAULT 12 в схеме — только подстраховка.
+function setFreeCancelHours(hours) {
+  db.prepare('UPDATE studio_info SET free_cancel_hours = ?, updated_at = ? WHERE id = 1').run(
+    Number(hours),
+    new Date().toISOString()
+  );
 }
 
 // ---------- Расписание мастера (админ-управление) ----------
@@ -266,7 +293,12 @@ function statsDashboard() {
       SELECT
         COUNT(*) AS total_bookings,
         SUM(CASE WHEN status IN ('wait','confirmed') THEN 1 ELSE 0 END) AS active_bookings,
-        SUM(CASE WHEN status IN ('wait','confirmed') THEN (SELECT price_kopecks FROM services s WHERE s.id = b.service_id) ELSE 0 END) AS active_sum_kopecks
+        -- Сумма активных записей — по всем услугам записи (booking_services),
+        -- а не только по первой: иначе комплекс из нескольких услуг занижал бы
+        -- сумму до цены одной услуги.
+        SUM(CASE WHEN status IN ('wait','confirmed') THEN
+          (SELECT COALESCE(SUM(bs.price_kopecks), 0) FROM booking_services bs WHERE bs.booking_id = b.id)
+        ELSE 0 END) AS active_sum_kopecks
       FROM bookings b`)
     .get();
   const mastersCount = db.prepare('SELECT COUNT(*) AS n FROM masters').get().n;
@@ -331,7 +363,7 @@ function getBusyIntervals(masterId, dateStartLocal, dateEndLocal, excludeBooking
 
 // ---------- Удержания (slot_holds) ----------
 
-function createHold({ masterId, startsAtLocal, endsAtLocal, totalMinutes, tokenHash, createdBy, expiresAtLocal }) {
+function createHold({ masterId, startsAtLocal, endsAtLocal, totalMinutes, tokenHash, createdBy, expiresAtLocal, serviceIds = null }) {
   const info = db
     .prepare(`
       INSERT INTO slot_holds
@@ -341,7 +373,25 @@ function createHold({ masterId, startsAtLocal, endsAtLocal, totalMinutes, tokenH
       Number(masterId), startsAtLocal, endsAtLocal, Number(totalMinutes),
       tokenHash, Number(createdBy), nowDbLocal(), expiresAtLocal
     );
-  return info.lastInsertRowid;
+  const holdId = info.lastInsertRowid;
+  // Услуги удержания запоминаем, чтобы при создании записи сверять набор, а не
+  // только суммарную длительность (наборы с одинаковыми минутами разные).
+  if (serviceIds && serviceIds.length) {
+    insertHoldServices(holdId, serviceIds);
+  }
+  return holdId;
+}
+
+function insertHoldServices(holdId, serviceIds) {
+  const ins = db.prepare('INSERT OR IGNORE INTO hold_services (hold_id, service_id) VALUES (?, ?)');
+  for (const id of serviceIds) ins.run(Number(holdId), Number(id));
+}
+
+function holdServiceIds(holdId) {
+  return db
+    .prepare('SELECT service_id FROM hold_services WHERE hold_id = ? ORDER BY service_id')
+    .all(Number(holdId))
+    .map((r) => r.service_id);
 }
 
 function holdByTokenHash(tokenHash) {
@@ -374,15 +424,80 @@ function purgeExpiredHolds() {
 
 // ---------- Записи (bookings) ----------
 
+// Услуги записи в порядке выбора клиента (booking_services.position).
+// Цена и длительность — снимок на момент записи, название — из каталога.
+function servicesOfBooking(bookingId) {
+  return db
+    .prepare(`
+      SELECT bs.service_id AS id, s.name, bs.price_kopecks, bs.duration_minutes
+      FROM booking_services bs
+      JOIN services s ON s.id = bs.service_id
+      WHERE bs.booking_id = ?
+      ORDER BY bs.position`)
+    .all(Number(bookingId));
+}
+
+// Те же услуги пачкой для списка записей: один запрос вместо запроса на запись.
+// Возвращает Map <booking_id, services[]>.
+function bookingServicesMap(bookingIds) {
+  const map = new Map();
+  const ids = bookingIds.map(Number).filter((id) => Number.isInteger(id));
+  if (!ids.length) return map;
+  // Плейсхолдеры собираются по длине массива, значения идут параметрами.
+  const placeholders = ids.map(() => '?').join(',');
+  const rows = db
+    .prepare(`
+      SELECT bs.booking_id, bs.service_id AS id, s.name, bs.price_kopecks, bs.duration_minutes
+      FROM booking_services bs
+      JOIN services s ON s.id = bs.service_id
+      WHERE bs.booking_id IN (${placeholders})
+      ORDER BY bs.booking_id, bs.position`)
+    .all(...ids);
+  for (const r of rows) {
+    if (!map.has(r.booking_id)) map.set(r.booking_id, []);
+    map.get(r.booking_id).push({
+      id: r.id, name: r.name, price_kopecks: r.price_kopecks, duration_minutes: r.duration_minutes,
+    });
+  }
+  return map;
+}
+
+// Записи, созданные напрямую в SQL (сид старой схемы, тесты, ручной разбор),
+// могут не иметь строк в booking_services. Для них набор услуг = одна услуга
+// bookings.service_id — иначе такие записи выглядели бы «без услуг».
+function bookingServicesOf(row, services) {
+  if (services && services.length) return services;
+  return [{
+    id: row.service_id,
+    name: row.service_name,
+    price_kopecks: row.service_price,
+    duration_minutes: row.service_duration,
+  }];
+}
+
 // Единственная функция вставки записи в bookings (рантайм и сид).
 // status передаёт только сид (confirmed/wait); API всегда создаёт 'wait'.
-function createBooking({ clientId, serviceId, masterId, startsAtLocal, endsAtLocal, comment, source, forceOverride = 0, status = 'wait' }) {
+// serviceIds — услуги записи (одна или несколько); serviceId оставлен для
+// обратной совместимости вызовов сида. bookings.service_id = первая услуга,
+// полный список — в booking_services (со снимком цены и длительности).
+function createBooking({ clientId, serviceId, serviceIds, masterId, startsAtLocal, endsAtLocal, comment, source, forceOverride = 0, status = 'wait' }) {
+  const ids = (serviceIds && serviceIds.length ? serviceIds : [serviceId]).map(Number);
+  if (!ids.length || ids.some((id) => !Number.isInteger(id) || id <= 0)) {
+    throw new Error('createBooking: нужен непустой список услуг.');
+  }
   const info = db
     .prepare(`
       INSERT INTO bookings (client_id, service_id, master_id, starts_at, ends_at, status, comment, source, force_override, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .run(Number(clientId), Number(serviceId), Number(masterId), startsAtLocal, endsAtLocal, status, comment, source, forceOverride ? 1 : 0, nowDbLocal());
-  return info.lastInsertRowid;
+    .run(Number(clientId), ids[0], Number(masterId), startsAtLocal, endsAtLocal, status, comment, source, forceOverride ? 1 : 0, nowDbLocal());
+  const bookingId = Number(info.lastInsertRowid);
+  // Снимок цены и длительности берём из каталога на момент записи.
+  // Плейсхолдеры: booking_id, position, service_id.
+  const ins = db.prepare(`
+    INSERT INTO booking_services (booking_id, service_id, position, price_kopecks, duration_minutes)
+    SELECT ?, id, ?, price_kopecks, duration_minutes FROM services WHERE id = ?`);
+  ids.forEach((id, i) => ins.run(bookingId, i + 1, id));
+  return bookingId;
 }
 
 function bookingById(id) {
@@ -418,7 +533,8 @@ function bookingDetail(id) {
   return row;
 }
 
-function serializeBooking(row) {
+function serializeBooking(row, services = null) {
+  const list = bookingServicesOf(row, services);
   return {
     id: row.id,
     starts_at: dbLocalToUtcIso(row.starts_at),
@@ -434,18 +550,27 @@ function serializeBooking(row) {
       name: row.client_name,
       phone: row.client_phone,
     },
-    service: {
-      id: row.service_id,
-      name: row.service_name,
-      price_kopecks: row.service_price,
-      duration_minutes: row.service_duration,
-    },
+    // service — первая услуга записи (обратная совместимость для старых
+    // клиентов и админки), services — весь набор.
+    service: list[0],
+    services: list,
+    total_price_kopecks: list.reduce((sum, s) => sum + s.price_kopecks, 0),
+    total_duration_minutes: list.reduce((sum, s) => sum + s.duration_minutes, 0),
     master: {
       id: row.master_id,
       name: row.master_name,
       role: row.master_role,
     },
   };
+}
+
+// Запись целиком для ответа API: деталь + её набор услуг. Единая точка,
+// чтобы список услуг не забывали приложить (в serializeBooking без второго
+// аргумента он берётся из bookings.service_id, то есть только первая услуга).
+function serializedBooking(id) {
+  const row = bookingDetail(id);
+  if (!row) return null;
+  return serializeBooking(row, servicesOfBooking(id));
 }
 
 function listBookings({ clientId = null, masterId = null, status = null, fromLocal = null, toLocal = null }) {
@@ -470,7 +595,8 @@ function listBookings({ clientId = null, masterId = null, status = null, fromLoc
       WHERE ${conds.join(' AND ')}
       ORDER BY b.starts_at`)
     .all(...params);
-  return rows.map(serializeBooking);
+  const services = bookingServicesMap(rows.map((r) => r.id));
+  return rows.map((row) => serializeBooking(row, services.get(row.id)));
 }
 
 function countBookingsFor(masterId) {
@@ -504,12 +630,14 @@ module.exports = {
   purgeExpiredSessions,
   clientIdForUser,
   clientById,
+  updateClient,
   listServices,
   listMasters,
   servicesOfMaster,
   masterById,
   serviceById,
   studioInfo,
+  setFreeCancelHours,
   masterSchedule,
   replaceMasterSchedule,
   listWorkBlocks,
@@ -525,6 +653,8 @@ module.exports = {
   scheduleForWeekday,
   getBusyIntervals,
   createHold,
+  insertHoldServices,
+  holdServiceIds,
   holdByTokenHash,
   holdById,
   deleteHold,
@@ -532,10 +662,13 @@ module.exports = {
   markHoldUsed,
   purgeExpiredHolds,
   createBooking,
+  servicesOfBooking,
+  bookingServicesMap,
   bookingById,
   setBookingStatus,
   moveBooking,
   bookingDetail,
+  serializedBooking,
   serializeBooking,
   listBookings,
   countBookingsFor,

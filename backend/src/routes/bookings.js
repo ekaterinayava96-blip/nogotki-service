@@ -20,24 +20,47 @@ const SOURCE = 'web'; // API-записи приходят из веб-форм�
 
 // Проверка, что интервал [startUtc, endUtc) свободен у мастера (без записи
 // произвольного перекрытия). Используем вычисление свободных слотов с шагом 1.
-function assertSlotFree(masterId, startUtc, endUtc) {
-  const totalMinutes = (endUtc.getTime() - startUtc.getTime()) / 60000;
+// Занятый слот — это 409 с nearest_free (sendSlotConflict), а не голый «Слот занят.»:
+// клиентский экран показывает по этой подсказке ближайшие свободные окна, и без
+// неё экран конфликта (Booking 04b) остаётся пустым.
+function slotIsFree(masterId, startUtc, totalMinutes) {
   const slots = freeSlots({
     masterId,
     dateStartUtc: salonDayStart(startUtc),
     totalMinutes,
     stepMinutes: 1,
   });
-  const exact = slots.some((s) => s.starts_at === startUtc.toISOString());
-  if (!exact) {
-    const err = new Error('Слот занят.');
-    err.status = 409;
-    throw err;
-  }
+  return slots.some((s) => s.starts_at === startUtc.toISOString());
+}
+
+// Проверка занятости с ответом клиенту. true — слот свободен и можно идти дальше;
+// false — ответ с подсказками уже отправлен, обработчик обязан выйти.
+function checkSlotFree(res, masterId, startUtc, totalMinutes) {
+  if (slotIsFree(masterId, startUtc, totalMinutes)) return true;
+  sendSlotConflict(res, masterId, totalMinutes);
+  return false;
+}
+
+// Услуги записи из тела запроса: новый формат service_ids (одна или несколько
+// услуг, порядок выбора сохраняется) и старый service_id (одна услуга).
+function readBookingServiceIds(body) {
+  const hasList = body.service_ids !== undefined && body.service_ids !== null && body.service_ids !== '';
+  if (hasList) return v.idList(body.service_ids, 'service_ids');
+  if (body.service_id === undefined || body.service_id === null || body.service_id === '') return [];
+  return [v.intId(body.service_id, 'service_id')];
+}
+
+// Одинаковый состав услуг (порядок не важен).
+function sameIdSet(a, b) {
+  return a.length === b.length
+    && [...a].sort((x, y) => x - y).join(',') === [...b].sort((x, y) => x - y).join(',');
 }
 
 // POST /bookings — создать запись.
-// body: { service_id, master_id, starts_at (UTC ISO), hold_token?, comment?, force_override? }
+// body: { service_ids: [..] (или service_id — одна услуга), master_id,
+//         starts_at (UTC ISO), hold_token?, comment?, force_override? }
+// Запись может закрывать несколько услуг: длительность слота и сумма считаются
+// по всему набору, мастер должен выполнять каждую из них.
 // С hold_token: слот уже удержан входящим клиентом (конфликт исключён).
 // Без hold_token: проверяем, что слот свободен прямо сейчас.
 //
@@ -48,7 +71,10 @@ router.post(
   '/',
   requireRole('client', 'master', 'owner'),
   asyncH(async (req, res) => {
-    const serviceId = v.intId(req.body.service_id, 'service_id');
+    const serviceIds = readBookingServiceIds(req.body);
+    if (serviceIds.length === 0) {
+      return res.status(400).json({ error: { message: 'Укажите услуги: service_ids или service_id.', code: 'MISSING_SERVICES' } });
+    }
     const masterId = v.intId(req.body.master_id, 'master_id');
     const comment = req.body.comment === undefined ? null : v.str(req.body.comment, 'comment', { max: 500 });
     const holdToken = req.body.hold_token;
@@ -60,20 +86,34 @@ router.post(
     const wantForce = v.bool(req.body.force_override, 'force_override');
     const forceOverride = hasRole(req.user, 'owner') ? (wantForce ?? 0) : 0;
 
-    const service = q.serviceById(serviceId);
-    if (!service || service.is_active !== 1) {
-      return res.status(400).json({ error: { message: 'Услуга не найдена.', code: 'UNKNOWN_SERVICE' } });
+    // Услуги в порядке выбора клиента. Суммарная длительность набора —
+    // столько слот должен занять у мастера.
+    const active = q.listServices({ activeOnly: true });
+    const services = serviceIds.map((id) => active.find((s) => s.id === id));
+    if (services.some((s) => !s)) {
+      return res.status(400).json({ error: { message: 'Одна из услуг не найдена или отключена.', code: 'UNKNOWN_SERVICE' } });
     }
+    const totalMinutes = services.reduce((sum, s) => sum + s.duration_minutes, 0);
     const master = q.masterById(masterId);
     if (!master || master.is_active !== 1) {
       return res.status(400).json({ error: { message: 'Мастер не найден.', code: 'UNKNOWN_MASTER' } });
     }
-    const can = db
-      .prepare('SELECT 1 AS hit FROM master_services WHERE master_id = ? AND service_id = ?')
-      .get(masterId, serviceId);
-    if (!can) {
+    // Мастер должен выполнять КАЖДУЮ услугу набора: комплекс из двух услуг, одну
+    // из которых мастер не делает, у него принять нельзя.
+    const masterServiceIds = db
+      .prepare('SELECT service_id FROM master_services WHERE master_id = ?')
+      .all(masterId)
+      .map((r) => r.service_id);
+    const missing = services.filter((s) => !masterServiceIds.includes(s.id));
+    if (missing.length) {
       return res.status(400).json({
-        error: { message: 'Мастер не выполняет эту услугу.', code: 'MASTER_SERVICE_MISMATCH' },
+        error: {
+          message: missing.length === 1
+            ? 'Мастер не выполняет эту услугу.'
+            : `Мастер не выполняет услуги: ${missing.map((s) => s.name).join(', ')}.`,
+          code: 'MASTER_SERVICE_MISMATCH',
+          services: missing.map((s) => ({ id: s.id, name: s.name })),
+        },
       });
     }
 
@@ -123,9 +163,17 @@ router.post(
       if (hold.created_by !== req.user.id && !hasRole(req.user, 'owner')) {
         return res.status(403).json({ error: { message: 'Недостаточно прав.', code: 'FORBIDDEN' } });
       }
-      if (hold.master_id !== masterId || hold.duration_minutes !== service.duration_minutes) {
+      // Удержание сверяем по НАБОРУ услуг, а не по длительности: два разных
+      // набора могут дать одинаковое число минут. Удержания, созданные до
+      // миграции 008, услуг не хранят — для них остаётся сверка по минутам
+      // (живут 10 минут, затем чистятся по expires_at).
+      const holdServiceIds = q.holdServiceIds(hold.id);
+      const holdMatches = holdServiceIds.length
+        ? sameIdSet(holdServiceIds, serviceIds)
+        : hold.duration_minutes === totalMinutes;
+      if (hold.master_id !== masterId || !holdMatches) {
         return res.status(400).json({
-          error: { message: 'Удержание не соответствует выбранным услуге/мастеру.', code: 'HOLD_MISMATCH' },
+          error: { message: 'Удержание не соответствует выбранным услугам/мастеру.', code: 'HOLD_MISMATCH' },
         });
       }
       startsLocal = hold.starts_at;
@@ -136,10 +184,8 @@ router.post(
       // проверку: её заменит сам триггер, который для force_override = 1
       // разрешает пересечение с другими записями мастера.
       const startUtc = assertNotPast(parseUtcIso(req.body.starts_at), 'starts_at');
-      const endsAtUtc = new Date(startUtc.getTime() + service.duration_minutes * 60000);
-      if (!forceOverride) {
-        assertSlotFree(masterId, startUtc, endsAtUtc);
-      }
+      const endsAtUtc = new Date(startUtc.getTime() + totalMinutes * 60000);
+      if (!forceOverride && !checkSlotFree(res, masterId, startUtc, totalMinutes)) return;
       startsLocal = toDbLocal(startUtc);
       endsLocal = toDbLocal(endsAtUtc);
     }
@@ -159,19 +205,19 @@ router.post(
           }
         }
         return q.createBooking({
-          clientId, serviceId, masterId, startsAtLocal: startsLocal, endsAtLocal: endsLocal,
+          clientId, serviceIds, masterId, startsAtLocal: startsLocal, endsAtLocal: endsLocal,
           comment, source: SOURCE, forceOverride,
         });
       })();
     } catch (err) {
       // Триггер trg_bookings_no_overlap_insert запретил пересечение.
       if (isBookingTimeConflict(err)) {
-        return sendSlotConflict(res, masterId, service.duration_minutes);
+        return sendSlotConflict(res, masterId, totalMinutes);
       }
       throw err;
     }
 
-    return res.status(201).json({ booking: q.serializeBooking(q.bookingDetail(bookingId)) });
+    return res.status(201).json({ booking: q.serializedBooking(bookingId) });
   })
 );
 
@@ -210,7 +256,7 @@ router.get(
     const row = q.bookingDetail(bookingId);
     if (!row) return res.status(404).json({ error: { message: 'Запись не найдена.', code: 'NOT_FOUND' } });
     checkAccess(req.user, row);
-    return res.json({ booking: q.serializeBooking(row) });
+    return res.json({ booking: q.serializeBooking(row, q.servicesOfBooking(bookingId)) });
   })
 );
 
@@ -234,19 +280,32 @@ router.patch(
     }
 
     let effectiveMasterId = row.master_id;
+    // Длительность записи = сумма её услуг: перенос должен занять столько же
+    // времени, сколько занимала сама запись.
+    const bookingServices = q.servicesOfBooking(bookingId);
+    const totalMinutes = (bookingServices.length ? bookingServices : [q.serviceById(row.service_id)])
+      .reduce((sum, s) => sum + s.duration_minutes, 0);
     if (req.body.master_id !== undefined) {
       const masterId = v.intId(req.body.master_id, 'master_id');
       const master = q.masterById(masterId);
       if (!master || master.is_active !== 1) {
         return res.status(400).json({ error: { message: 'Мастер не найден.', code: 'UNKNOWN_MASTER' } });
       }
-      // Новый мастер должен выполнять услугу этой записи (как при создании).
-      const can = db
-        .prepare('SELECT 1 AS hit FROM master_services WHERE master_id = ? AND service_id = ?')
-        .get(masterId, row.service_id);
-      if (!can) {
+      // Новый мастер должен выполнять все услуги записи (как при создании).
+      const masterServiceIds = db
+        .prepare('SELECT service_id FROM master_services WHERE master_id = ?')
+        .all(masterId)
+        .map((r) => r.service_id);
+      const missing = bookingServices.filter((s) => !masterServiceIds.includes(s.id));
+      if (missing.length) {
         return res.status(400).json({
-          error: { message: 'Мастер не выполняет эту услугу.', code: 'MASTER_SERVICE_MISMATCH' },
+          error: {
+            message: missing.length === 1
+              ? 'Мастер не выполняет эту услугу.'
+              : `Мастер не выполняет услуги: ${missing.map((s) => s.name).join(', ')}.`,
+            code: 'MASTER_SERVICE_MISMATCH',
+            services: missing.map((s) => ({ id: s.id, name: s.name })),
+          },
         });
       }
       // Та же логика, что при создании записи: роль master ведёт записи
@@ -261,9 +320,8 @@ router.patch(
     }
 
     const startUtc = assertNotPast(parseUtcIso(req.body.starts_at), 'starts_at');
-    const totalMinutes = row.service_duration;
     const endUtc = new Date(startUtc.getTime() + totalMinutes * 60000);
-    assertSlotFree(effectiveMasterId, startUtc, endUtc);
+    if (!checkSlotFree(res, effectiveMasterId, startUtc, totalMinutes)) return;
 
     try {
       db.transaction(() => {
@@ -277,7 +335,7 @@ router.patch(
       throw err;
     }
 
-    return res.json({ booking: q.serializeBooking(q.bookingDetail(bookingId)) });
+    return res.json({ booking: q.serializedBooking(bookingId) });
   })
 );
 
@@ -296,7 +354,7 @@ router.post(
       });
     }
     q.setBookingStatus(bookingId, 'canceled');
-    return res.json({ booking: q.serializeBooking(q.bookingDetail(bookingId)) });
+    return res.json({ booking: q.serializedBooking(bookingId) });
   })
 );
 

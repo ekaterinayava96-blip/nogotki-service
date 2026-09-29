@@ -111,12 +111,61 @@ router.get('/me', authRequired, asyncH(async (req, res) => {
   const roles = req.user.roles;
   const clientId = roles.includes('client') ? q.clientIdForUser(req.user.id) : null;
   const user = q.publicUser(req.user, { roles, clientId });
-  // Для приветствия на кабинете добавляем имя клиента (данные из БД).
+  // Данные клиента из БД: имя для приветствия на кабинете, телефон — для
+  // формы подтверждения записи (Booking 04). Отдаём оба, иначе клиент без
+  // записей пришёл бы на экран с пустым телефоном и вводил его заново.
   if (clientId) {
     const client = q.clientById(clientId);
-    if (client) user.client_name = client.name;
+    if (client) {
+      user.client_name = client.name;
+      user.client_phone = client.phone;
+    }
   }
   return res.json({ user });
+}));
+
+// PATCH /auth/me — контакты клиента (имя, телефон) из формы подтверждения
+// записи (Booking 04). Меняются только свои данные и только у роли client:
+// у мастера и владельца профиля клиента нет, поэтому такой правке не под что.
+// Поля необязательные — приходят только изменённые, остальные не затираются.
+router.patch('/me', authRequired, asyncH(async (req, res) => {
+  const clientId = q.clientIdForUser(req.user.id);
+  if (!clientId) {
+    return res.status(403).json({
+      error: { message: 'Изменять контакты может только клиент.', code: 'FORBIDDEN' },
+    });
+  }
+
+  const body = req.body || {};
+  const name = body.name === undefined ? undefined : v.name(body.name);
+  const phone = body.phone === undefined ? undefined : v.phone(body.phone);
+  if (name === undefined && phone === undefined) {
+    return res.status(400).json({
+      error: { message: 'Передайте name или phone.', code: 'NOTHING_TO_UPDATE' },
+    });
+  }
+
+  // Телефон уникален в БД, поэтому занятый проверяем сами: без этой проверки
+  // клиент получил бы 500 от UNIQUE-ограничения вместо понятного ответа.
+  if (phone !== undefined) {
+    const taken = db
+      .prepare('SELECT 1 AS hit FROM clients WHERE phone = ? AND id != ?')
+      .get(phone, clientId);
+    if (taken) {
+      return res.status(409).json({
+        error: { message: 'Телефон уже зарегистрирован.', code: 'PHONE_TAKEN' },
+      });
+    }
+  }
+
+  const client = q.updateClient(clientId, { name, phone });
+  const user = q.publicUser(req.user, { roles: req.user.roles, clientId });
+  // user отдаём с обновлёнными контактами — тем же, что и client: иначе
+  // вызывающий код, читающий только user, получил бы старый телефон.
+  return res.json({
+    client: { id: client.id, name: client.name, phone: client.phone },
+    user: { ...user, client_name: client.name, client_phone: client.phone },
+  });
 }));
 
 // Выход: сессия отзывается в БД (revoked_at) сразу — до срока действия.

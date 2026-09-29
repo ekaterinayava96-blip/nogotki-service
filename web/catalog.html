@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Услуги и мастера — Ноготочки</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="tokens.css" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+
+  <div id="global-header"></div>
+
+  <main class="container" style="padding-top:var(--space-6)">
+    <h2 style="margin-bottom:var(--space-2)">Услуги и мастера</h2>
+    <p class="hint" style="margin-bottom:var(--space-5)">
+      Отметьте нужные услуги — можно несколько. Сумма и время пересчитаются сразу,
+      а мастера, которые не делают весь выбранный набор, будут помечены.
+    </p>
+    <div id="error" class="alert alert--error" hidden></div>
+
+    <div class="layout--booking">
+      <div>
+        <!-- УСЛУГИ: выбор нескольких, итог снизу -->
+        <div class="panel" style="margin-bottom:var(--space-5)">
+          <h3 style="margin-bottom:var(--space-2)">Услуги</h3>
+          <p class="hint" style="margin-bottom:var(--space-4)">Цены и длительности — из каталога студии.</p>
+          <div id="serviceList" class="grid">
+            <div class="skeleton skel-card"></div>
+            <div class="skeleton skel-card"></div>
+            <div class="skeleton skel-card"></div>
+          </div>
+          <div class="step__foot" style="margin-top:var(--space-5)">
+            <span class="step__total" id="serviceTotal">Итого: —</span>
+            <div class="step__foot-actions">
+              <span class="hint" id="serviceHint">Выберите хотя бы одну услугу</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- МАСТЕРА: неподходящие видны, но помечены причиной -->
+        <div class="panel">
+          <h3 style="margin-bottom:var(--space-2)">Мастера</h3>
+          <p class="hint" id="masterAbout" style="margin-bottom:var(--space-4)">Выберите услуги — покажем, кто сможет их выполнить.</p>
+          <div id="masterList" style="display:flex; flex-direction:column; gap:var(--space-3)">
+            <div class="skeleton skel-row"></div>
+            <div class="skeleton skel-row"></div>
+          </div>
+          <p class="hint" id="masterHint" style="margin-top:var(--space-3)"></p>
+        </div>
+      </div>
+
+      <!-- ИТОГ И ПЕРЕХОД К ЗАПИСИ -->
+      <aside>
+        <div class="panel panel--tint">
+          <h3 style="margin-bottom:var(--space-4)">Ваш выбор</h3>
+          <dl class="summary">
+            <div class="summary__row"><dt>Услуги</dt><dd id="sumService">—</dd></div>
+            <div class="summary__row"><dt>Количество</dt><dd id="sumCount">—</dd></div>
+            <div class="summary__row"><dt>Время</dt><dd id="sumTime">—</dd></div>
+            <div class="summary__row"><dt>Мастер</dt><dd id="sumMaster">—</dd></div>
+            <div class="summary__divider"></div>
+            <div class="summary__row summary__total"><dt>Итого</dt><dd id="sumPrice">—</dd></div>
+          </dl>
+          <div id="noMasterWarn" class="alert alert--warning" hidden style="margin-top:var(--space-4)">
+            Подходящих мастеров нет — уберите лишние услуги.
+          </div>
+          <div class="step__foot" style="margin-top:var(--space-5)">
+            <div class="step__foot-actions">
+              <span class="hint" id="nextHint">Выберите хотя бы одну услугу</span>
+              <button type="button" class="btn btn--primary btn--md" id="toBooking" disabled>Далее →</button>
+            </div>
+          </div>
+          <button type="button" class="btn btn--ghost btn--sm btn--block" id="resetChoice" hidden style="margin-top:var(--space-3)">
+            Сбросить выбор
+          </button>
+          <p class="hint" style="margin-top:var(--space-3)">
+            На следующем шаге выберете дату и время. Выбор сохранится, если страницу перезагрузить.
+          </p>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <script src="js/api.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/header.js"></script>
+  <script>
+    (function () {
+      'use strict';
+
+      var state = { services: [], masters: [], serviceIds: [], master: null };
+
+      function $(id) { return document.getElementById(id); }
+
+      function selectedServices() {
+        return state.serviceIds
+          .map(function (id) {
+            return state.services.filter(function (s) { return s.id === id; })[0];
+          })
+          .filter(Boolean);
+      }
+
+      // Итоги считаем по значениям сервера (price_kopecks/duration_minutes),
+      // чтобы цифры на экране и в записи не расходились
+      function totals() {
+        var list = selectedServices();
+        return {
+          count: list.length,
+          price: list.reduce(function (acc, s) { return acc + Number(s.price_kopecks || 0); }, 0),
+          minutes: list.reduce(function (acc, s) { return acc + Number(s.duration_minutes || 0); }, 0)
+        };
+      }
+
+      // Каких выбранных услуг мастер не делает
+      function masterMissing(m) {
+        var have = (m.services || []).map(function (s) { return s.id; });
+        return selectedServices().filter(function (s) { return have.indexOf(s.id) === -1; });
+      }
+
+      function renderServices() {
+        $('serviceList').innerHTML = state.services.map(function (s) {
+          var sel = state.serviceIds.indexOf(s.id) !== -1;
+          return '<button type="button" class="option' + (sel ? ' is-selected' : '') + '" data-service="' + s.id +
+            '" aria-pressed="' + (sel ? 'true' : 'false') + '">' +
+            '<span class="option__check" aria-hidden="true">' + (sel ? '✓' : '') + '</span>' +
+            '<span>' +
+              '<span class="option__title">' + window.api.esc(s.name) + '</span><br>' +
+              '<span class="option__meta">' + window.api.esc(s.description || '') + '</span>' +
+            '</span>' +
+            '<span class="option__side">' +
+              '<span class="option__price">' + window.api.rub(s.price_kopecks) + '</span><br>' +
+              '<span class="option__meta">⏱ ' + window.api.duration(s.duration_minutes) + '</span>' +
+            '</span>' +
+          '</button>';
+        }).join('');
+
+        var t = totals();
+        $('serviceTotal').textContent = t.count
+          ? 'Итого: ' + window.api.rub(t.price) + ' · ' + window.api.duration(t.minutes)
+          : 'Итого: —';
+        $('serviceHint').textContent = t.count
+          ? 'Услуг выбрано: ' + t.count
+          : 'Выберите хотя бы одну услугу';
+      }
+
+      // Неподходящие мастера не прячем: помечаем причиной и блокируем выбор
+      function renderMasters() {
+        var host = $('masterList');
+        var t = totals();
+        if (!state.masters.length) {
+          host.innerHTML = '<p class="stub">Мастера не загрузились. Обновите страницу.</p>';
+          $('masterHint').textContent = 'Нет списка мастеров';
+          return;
+        }
+        if (!t.count) {
+          host.innerHTML = state.masters.map(function (m) { return masterCard(m, [], false); }).join('');
+          $('masterAbout').textContent = 'Выберите услуги — покажем, кто сможет их выполнить.';
+          $('masterHint').textContent = 'Сейчас подходят все мастера: услуги ещё не выбраны';
+          return;
+        }
+
+        var fit = 0;
+        host.innerHTML = state.masters.map(function (m) {
+          var missing = masterMissing(m);
+          if (!missing.length) fit++;
+          return masterCard(m, missing, true);
+        }).join('');
+        $('masterAbout').textContent = 'Выбранные услуги: ' + selectedServices()
+          .map(function (s) { return s.name; }).join(', ');
+        $('masterHint').textContent = !fit
+          ? 'Подходящих мастеров нет — уберите лишние услуги'
+          : (state.master ? 'Мастер выбран' : 'Подходящих мастеров: ' + fit + ' — можно выбрать любого');
+      }
+
+      function masterCard(m, missing, showNote) {
+        var sel = state.master && state.master.id === m.id;
+        var ok = missing.length === 0;
+        var initial = window.api.esc((m.name || '?').trim().charAt(0).toUpperCase());
+        var avatar = m.photo_path
+          ? '<img class="option__avatar" src="' + window.api.esc(m.photo_path) + '" alt="' + window.api.esc(m.name) + '">'
+          : '<span class="option__avatar">' + initial + '</span>';
+        var meta = window.api.esc(m.role || '') +
+          (m.experience_years ? ' · в профессии ' + m.experience_years + ' лет' : '');
+        return '<button type="button" class="option' + (sel ? ' is-selected' : '') + (ok ? '' : ' is-disabled') + '"' +
+          (ok ? '' : ' disabled') + ' data-master="' + m.id + '">' +
+          avatar +
+          '<span>' +
+            '<span class="option__title">' + window.api.esc(m.name) + '</span><br>' +
+            '<span class="option__meta">' + meta + '</span>' +
+            (showNote && !ok ? '<span class="option__note">Не делает: ' +
+              window.api.esc(missing.map(function (s) { return s.name; }).join(', ')) + '</span>' : '') +
+          '</span>' +
+        '</button>';
+      }
+
+      // Резюме и кнопка перехода. «Далее» не активна без услуг, а рядом —
+      // что именно не выбрано.
+      function renderSummary() {
+        var t = totals();
+        var names = selectedServices().map(function (s) { return s.name; });
+        $('sumService').textContent = names.length ? names.join(' + ') : '—';
+        $('sumCount').textContent = t.count ? t.count + ' шт.' : '—';
+        $('sumTime').textContent = t.count ? window.api.duration(t.minutes) : '—';
+        $('sumMaster').textContent = state.master ? state.master.name : '—';
+        $('sumPrice').textContent = t.count ? window.api.rub(t.price) : '—';
+
+        var fit = t.count ? state.masters.filter(function (m) { return !masterMissing(m).length; }).length : 0;
+        $('noMasterWarn').hidden = !(t.count && state.masters.length && !fit);
+
+        var hint;
+        if (!t.count) hint = 'Выберите хотя бы одну услугу';
+        else if (!state.masters.length) hint = 'Не загрузился список мастеров';
+        else if (!fit) hint = 'Нет мастера на все выбранные услуги';
+        else if (!state.master) hint = 'Мастера можно выбрать и на следующем шаге';
+        else hint = 'Готово к записи';
+        $('nextHint').textContent = hint;
+        $('toBooking').disabled = !t.count || !fit;
+        $('resetChoice').hidden = !(t.count || state.master);
+      }
+
+      function render() {
+        renderServices();
+        renderMasters();
+        renderSummary();
+      }
+
+      function saveDraft() {
+        window.store.save({
+          service_ids: state.serviceIds.slice(),
+          master_id: state.master ? state.master.id : null
+        });
+      }
+
+      // Выбор с этой страницы уходит в запись через черновик: booking.html
+      // читает его на старте и открывает уже начатый выбор
+      function goBooking() {
+        saveDraft();
+        window.location.href = 'booking.html';
+      }
+
+      function toggleService(id) {
+        var i = state.serviceIds.indexOf(id);
+        if (i === -1) state.serviceIds.push(id);
+        else state.serviceIds.splice(i, 1);
+        // Мастер мог не подходить под новый набор услуг
+        if (state.master && masterMissing(state.master).length) state.master = null;
+        render();
+        saveDraft();
+      }
+
+      function pickMaster(id) {
+        var m = state.masters.filter(function (x) { return x.id === id; })[0];
+        if (!m || masterMissing(m).length) return;
+        state.master = (state.master && state.master.id === id) ? null : m;
+        render();
+        saveDraft();
+      }
+
+      function resetChoice() {
+        state.serviceIds = [];
+        state.master = null;
+        render();
+        saveDraft();
+      }
+
+      document.addEventListener('click', function (e) {
+        var svc = e.target.closest('[data-service]');
+        if (svc) { toggleService(Number(svc.dataset.service)); return; }
+        var mst = e.target.closest('[data-master]');
+        if (mst) { pickMaster(Number(mst.dataset.master)); return; }
+        if (e.target.closest('#toBooking')) { goBooking(); return; }
+        if (e.target.closest('#resetChoice')) { resetChoice(); }
+      });
+
+      // Возвращаемся на страницу — показываем текущий выбор из черновика
+      function loadDraft() {
+        var draft = window.store.load();
+        state.serviceIds = draft.service_ids.slice();
+        state.master = null;
+        state.savedMasterId = draft.master_id;
+      }
+
+      function start() {
+        loadDraft();
+        window.api.request('/api/services')
+          .then(function (d) {
+            state.services = d.services;
+            // Черновик мог содержать услугу, которой больше нет в каталоге
+            state.serviceIds = state.serviceIds.filter(function (id) {
+              return state.services.some(function (s) { return s.id === id; });
+            });
+            render();
+            return window.api.request('/api/masters');
+          })
+          .then(function (d) {
+            state.masters = d.masters;
+            if (!state.master && state.savedMasterId) {
+              state.master = state.masters.filter(function (m) { return m.id === state.savedMasterId; })[0] || null;
+            }
+            if (state.master && masterMissing(state.master).length) state.master = null;
+            render();
+          })
+          .catch(function () {
+            $('serviceList').innerHTML = '<p class="stub">Не удалось загрузить услуги. Попробуйте позже.</p>';
+          });
+      }
+
+      start();
+    })();
+  </script>
+</body>
+</html>

@@ -122,6 +122,8 @@ const counts = {
 
 function insertStudio() {
   if (hasStudio.get()) return;
+  // free_cancel_hours не перечисляем: значение приходит из DEFAULT 12 миграции
+  // 009, чтобы сид и уже существующая студия вели себя одинаково.
   db.prepare(
     'INSERT INTO studio_info (id, studio_name, address, phone, telegram, map_hint, updated_at) VALUES (1, ?, ?, ?, ?, ?, ?)'
   ).run('Ноготочки', 'г. Воронеж, Проспект Революции, д. 10', '+79004535000', '@Vibekatena', 'Вход во дворе, вывеска «Ноготочки»', ts());

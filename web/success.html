@@ -22,6 +22,9 @@
       <div class="panel" style="text-align:center; margin-bottom:var(--space-5)">
         <div class="panel__icon">💖</div>
         <h1 style="margin-bottom:var(--space-3)">Запись создана</h1>
+        <div class="alert alert--success" style="margin-bottom:var(--space-3)">
+          ✅ Запись создана, ждём подтверждения мастера
+        </div>
         <p style="color:var(--color-text-muted)">
           Статус: <span class="badge badge--wait" id="stStatus">ждём подтверждения</span><br />
           Мастер подтвердит визит и напомнит о нём за сутки.
@@ -29,13 +32,19 @@
       </div>
 
       <div class="panel panel--tint" style="margin-bottom:var(--space-5)">
-        <h3 style="margin-bottom:var(--space-4)">Детали записи</h3>
+        <h3 style="margin-bottom:var(--space-4)">Детали визита</h3>
         <dl class="summary">
-          <div class="summary__row"><dt>Услуга</dt><dd id="sumService">—</dd></div>
           <div class="summary__row"><dt>Мастер</dt><dd id="sumMaster">—</dd></div>
-          <div class="summary__row"><dt>Дата и время</dt><dd id="sumWhen">—</dd></div>
+          <div class="summary__row"><dt>Дата</dt><dd id="sumDate">—</dd></div>
+          <div class="summary__row">
+            <dt>Время</dt>
+            <dd class="summary__cell"><span id="sumTime">—</span></dd>
+          </div>
+          <div class="summary__row"><dt>Длительность</dt><dd id="sumDuration">—</dd></div>
           <div class="summary__row"><dt>Контакт</dt><dd id="sumContact">—</dd></div>
           <div class="summary__divider"></div>
+          <h4 style="margin-bottom:var(--space-2)">Услуги</h4>
+          <div class="summary" id="sumPrices"></div>
           <div class="summary__row summary__total"><dt>К оплате</dt><dd id="sumPrice">—</dd></div>
         </dl>
       </div>
@@ -78,6 +87,19 @@
         $('missing').hidden = false;
       }
 
+      var DAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+
+      // «ДД.ММ.ГГГГ, пн» из даты салона 'YYYY-MM-DD' (номер дня недели не съезжает)
+      function prettyDate(iso) {
+        var p = iso.split('-');
+        var wd = new Date(iso + 'T12:00:00+03:00').getUTCDay();
+        return p[2] + '.' + p[1] + '.' + p[0] + ', ' + DAYS[wd];
+      }
+      // UTC ISO -> календарный день салона 'YYYY-MM-DD'
+      function slotDate(iso) {
+        return new Date(new Date(iso).getTime() + 180 * 60000).toISOString().slice(0, 10);
+      }
+
       function renderStudio(st) {
         if (!st) return;
         $('stAddress').textContent = st.address || '—';
@@ -97,11 +119,18 @@
             $('content').hidden = false;
             $('stStatus').textContent = window.BOOKING_STATUS[b.status] || b.status;
             $('stStatus').className = 'badge badge--' + (b.status === 'confirmed' ? 'confirmed' : 'wait');
-            $('sumService').textContent = b.service.name;
+            var services = window.api.servicesOf(b);
             $('sumMaster').textContent = b.master.name;
-            $('sumWhen').textContent = window.api.fmt(b.starts_at);
+            $('sumDate').textContent = prettyDate(slotDate(b.starts_at));
+            // Начало и конец визита — из starts_at/ends_at ответа сервера
+            $('sumTime').textContent = window.api.hour(b.starts_at) + '–' + window.api.hour(b.ends_at);
+            $('sumDuration').textContent = window.api.duration(services.minutes);
             $('sumContact').textContent = b.client.name + (b.client.phone ? ', ' + b.client.phone : '');
-            $('sumPrice').textContent = window.api.rub(b.service.price_kopecks);
+            $('sumPrices').innerHTML = services.list.map(function (s) {
+              return '<div class="summary__row"><dt>' + window.api.esc(s.name) + '</dt>' +
+                '<dd>' + window.api.rub(s.price_kopecks) + '</dd></div>';
+            }).join('');
+            $('sumPrice').textContent = window.api.rub(services.price);
           })
           .catch(function (err) {
             if (err.status === 404) { showMissing(); return; }

@@ -37,6 +37,8 @@ router.get(
 // Информация о студии: название, адрес, телефон, Telegram, подсказка как найти.
 // График работы студии — сводка расписаний активных мастеров по дням недели
 // (общее «окно работы» студии на день: минимум старта — максимум конца).
+// free_cancel_hours отдаём здесь же: клиентский кабинет собирает из него
+// текст правил отмены, а правило хранится в настройках студии.
 router.get(
   '/studio',
   asyncH(async (req, res) => {
@@ -63,6 +65,7 @@ router.get(
         phone: info.phone,
         telegram: info.telegram,
         map_hint: info.map_hint,
+        free_cancel_hours: Number(info.free_cancel_hours || 0),
         work_hours: schedule.map((s) => ({
           weekday: s.weekday,
           start_minutes: s.start_minutes,
