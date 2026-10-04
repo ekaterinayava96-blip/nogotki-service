@@ -126,7 +126,7 @@ function listMasters({ activeOnly = true } = {}) {
   const where = activeOnly ? 'WHERE m.is_active = 1' : '';
   return db
     .prepare(`
-      SELECT m.id, m.name, m.role, m.experience_years, m.photo_path,
+      SELECT m.id, m.name, m.role, m.experience_years, m.photo_path, m.is_active,
              (SELECT COUNT(*) FROM bookings b WHERE b.master_id = m.id) AS bookings_count
       FROM masters m
       ${where}
@@ -138,19 +138,35 @@ function listMasters({ activeOnly = true } = {}) {
       role: m.role,
       experience_years: m.experience_years,
       photo_path: m.photo_path,
+      // Считается по всем записям мастера, включая отменённые: это служебная
+      // цифра для панели владельца. В публичный каталог она не попадает
+      // (routes/catalog.js отдаёт только поля витрины).
       bookings_count: m.bookings_count,
-      services: servicesOfMaster(m.id),
+      // is_active обязан быть в SELECT выше: без него поле было бы всегда
+      // false, и панель владельца показала бы всех мастеров выключенными, а
+      // сохранение карточки тихо деактивировало бы мастера.
+      is_active: !!m.is_active,
+      // activeOnly:true — клиентский запрос: показываем только активные услуги.
+      // activeOnly:false — панель владельца: она перечисляет и отключённых
+      // мастеров, и по тем же логике показывает полный набор их услуг.
+      services: servicesOfMaster(m.id, { activeOnly: activeOnly }),
     }));
 }
 
-function servicesOfMaster(masterId) {
+// Услуги мастера. activeOnly — по умолчанию только активные: клиенту отключённые
+// предлагать нельзя. Панели владельца нужен полный набор (activeOnly: false),
+// иначе в форме мастера нельзя было бы увидеть и снять связь с отключённой
+// услугой — она пропадала бы молча, и администратор не понимал бы почему.
+function servicesOfMaster(masterId, { activeOnly = true } = {}) {
+  const where = activeOnly ? 'AND s.is_active = 1' : '';
   return db
     .prepare(`
-      SELECT s.id, s.name, s.price_kopecks, s.duration_minutes
+      SELECT s.id, s.name, s.price_kopecks, s.duration_minutes, s.is_active
       FROM master_services ms JOIN services s ON s.id = ms.service_id
-      WHERE ms.master_id = ? AND s.is_active = 1
+      WHERE ms.master_id = ? ${where}
       ORDER BY s.id`)
-    .all(Number(masterId));
+    .all(Number(masterId))
+    .map((s) => ({ ...s, is_active: !!s.is_active }));
 }
 
 function masterById(id) {
@@ -293,9 +309,9 @@ function statsDashboard() {
       SELECT
         COUNT(*) AS total_bookings,
         SUM(CASE WHEN status IN ('wait','confirmed') THEN 1 ELSE 0 END) AS active_bookings,
-        -- Сумма активных записей — по всем услугам записи (booking_services),
-        -- а не только по первой: иначе комплекс из нескольких услуг занижал бы
-        -- сумму до цены одной услуги.
+        -- Итоговая сумма записей: перебираем состав записи (booking_services),
+        -- а не берём service_price из services: цена в записи фиксируется на
+        -- момент брони и не меняется задним числом при правке прайса.
         SUM(CASE WHEN status IN ('wait','confirmed') THEN
           (SELECT COALESCE(SUM(bs.price_kopecks), 0) FROM booking_services bs WHERE bs.booking_id = b.id)
         ELSE 0 END) AS active_sum_kopecks
@@ -307,6 +323,70 @@ function statsDashboard() {
     active_bookings: totals.active_bookings || 0,
     active_sum_kopecks: totals.active_sum_kopecks || 0,
     masters_count: mastersCount,
+  };
+}
+
+// Статистика за период. Тот же счётчик, что и statsDashboard, но ограниченный
+// датами, плюс разбивка по статусам, мастерам и дням: владельцу одного числа
+// «записей за месяц» мало, ему видеть, кто загружен и в какие дни поток.
+//
+// Период приходит уже в салонном локальном времени (routes/admin.js переводит
+// UTC через toDbLocal), поэтому группировка по дням — это substr(starts_at, 1, 10):
+// это и есть дата визита в календаре студии, без обратного пересчёта по TZ.
+function statsPeriod({ fromLocal = null, toLocal = null }) {
+  const { where, params } = bookingFilterConds({ fromLocal, toLocal });
+
+  const totals = db
+    .prepare(`
+      SELECT
+        COUNT(*) AS total_bookings,
+        SUM(CASE WHEN status IN ('wait','confirmed') THEN 1 ELSE 0 END) AS active_bookings,
+        SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) AS done_bookings,
+        SUM(CASE WHEN status = 'canceled' THEN 1 ELSE 0 END) AS canceled_bookings,
+        COALESCE(SUM(
+          (SELECT COALESCE(SUM(bs.price_kopecks), 0) FROM booking_services bs WHERE bs.booking_id = b.id)
+        ), 0) AS total_sum_kopecks
+      FROM bookings b
+      WHERE ${where}`)
+    .get(...params);
+
+  const byMaster = db
+    .prepare(`
+      SELECT m.id, m.name,
+             COUNT(*) AS bookings,
+             COALESCE(SUM(
+               (SELECT COALESCE(SUM(bs.price_kopecks), 0) FROM booking_services bs WHERE bs.booking_id = b.id)
+             ), 0) AS sum_kopecks
+      FROM bookings b
+      JOIN masters m ON m.id = b.master_id
+      WHERE ${where}
+      GROUP BY m.id, m.name
+      ORDER BY bookings DESC, m.name`)
+    .all(...params);
+
+  const byDay = db
+    .prepare(`
+      SELECT substr(starts_at, 1, 10) AS day,
+             COUNT(*) AS bookings,
+             COALESCE(SUM(
+               (SELECT COALESCE(SUM(bs.price_kopecks), 0) FROM booking_services bs WHERE bs.booking_id = b.id)
+             ), 0) AS sum_kopecks
+      FROM bookings b
+      WHERE ${where}
+      GROUP BY day
+      ORDER BY day`)
+    .all(...params);
+
+  return {
+    from: fromLocal,
+    to: toLocal,
+    total_bookings: totals.total_bookings,
+    active_bookings: totals.active_bookings || 0,
+    done_bookings: totals.done_bookings || 0,
+    canceled_bookings: totals.canceled_bookings || 0,
+    total_sum_kopecks: totals.total_sum_kopecks || 0,
+    by_master: byMaster,
+    by_day: byDay,
   };
 }
 
@@ -573,7 +653,10 @@ function serializedBooking(id) {
   return serializeBooking(row, servicesOfBooking(id));
 }
 
-function listBookings({ clientId = null, masterId = null, status = null, fromLocal = null, toLocal = null }) {
+// Условия выборки записок одинаковы для списка и для его счётчика: собираем
+// их в одном месте, иначе «всего 12» и показанные 12 строк разъедутся, как
+// только фильтры заработают не на глаз.
+function bookingFilterConds({ clientId = null, masterId = null, status = null, fromLocal = null, toLocal = null }) {
   const conds = ['1=1'];
   const params = [];
   if (clientId) { conds.push('b.client_id = ?'); params.push(clientId); }
@@ -581,6 +664,16 @@ function listBookings({ clientId = null, masterId = null, status = null, fromLoc
   if (status) { conds.push('b.status = ?'); params.push(status); }
   if (fromLocal) { conds.push('b.starts_at >= ?'); params.push(fromLocal); }
   if (toLocal) { conds.push('b.starts_at < ?'); params.push(toLocal); }
+  return { where: conds.join(' AND '), params };
+}
+
+function countBookings(filter) {
+  const { where, params } = bookingFilterConds(filter);
+  return db.prepare(`SELECT COUNT(*) AS n FROM bookings b WHERE ${where}`).get(...params).n;
+}
+
+function listBookings({ clientId = null, masterId = null, status = null, fromLocal = null, toLocal = null, limit = null, offset = 0 }) {
+  const { where, params } = bookingFilterConds({ clientId, masterId, status, fromLocal, toLocal });
 
   const rows = db
     .prepare(`
@@ -592,9 +685,10 @@ function listBookings({ clientId = null, masterId = null, status = null, fromLoc
       JOIN clients c ON c.id = b.client_id
       JOIN services s ON s.id = b.service_id
       JOIN masters m ON m.id = b.master_id
-      WHERE ${conds.join(' AND ')}
-      ORDER BY b.starts_at`)
-    .all(...params);
+      WHERE ${where}
+      ORDER BY b.starts_at
+      ${limit === null ? '' : 'LIMIT ? OFFSET ?'}`)
+    .all(...params, ...(limit === null ? [] : [Number(limit), Number(offset)]));
   const services = bookingServicesMap(rows.map((r) => r.id));
   return rows.map((row) => serializeBooking(row, services.get(row.id)));
 }
@@ -602,6 +696,15 @@ function listBookings({ clientId = null, masterId = null, status = null, fromLoc
 function countBookingsFor(masterId) {
   const r = db.prepare('SELECT COUNT(*) AS n FROM bookings WHERE master_id = ?').get(Number(masterId));
   return r.n;
+}
+
+// Сколько записей ссылается на услугу — и по главной ссылке записи, и по составу
+// комплекса. Нужна панели владельца: пока записи есть, услугу нельзя удалить,
+// только отключить (DELETE /api/admin/services/:id).
+function countBookingsWithService(serviceId) {
+  const direct = db.prepare('SELECT COUNT(*) AS n FROM bookings WHERE service_id = ?').get(Number(serviceId));
+  const inSet = db.prepare('SELECT COUNT(*) AS n FROM booking_services WHERE service_id = ?').get(Number(serviceId));
+  return Number(direct.n) + Number(inSet.n);
 }
 
 function lastBookingConflictAt(masterId, excludeBookingId, startsLocal, endsLocal) {
@@ -645,6 +748,7 @@ module.exports = {
   createWorkBlock,
   deleteWorkBlock,
   statsDashboard,
+  statsPeriod,
   createFeedback,
   feedbackById,
   serializeFeedback,
@@ -671,6 +775,8 @@ module.exports = {
   serializedBooking,
   serializeBooking,
   listBookings,
+  countBookings,
   countBookingsFor,
+  countBookingsWithService,
   lastBookingConflictAt,
 };

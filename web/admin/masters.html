@@ -16,16 +16,59 @@
 
   <main class="container">
     <h1 class="adm__title">Мастера</h1>
-    <p class="adm__lead">Мастера студии: специализация, опыт и перечень услуг.</p>
+    <p class="adm__lead">Кто работает в студии и какие услуги выполняет. Отметки об услугах
+      определяют, кому клиент сможет записаться: мастер, который не делает выбранную
+      услугу, в выборе недоступен.</p>
 
     <div id="admin-menu"></div>
 
-    <div class="empty-state">
-      <p>Мастера пока не показаны. Данные пока не подключены.</p>
+    <div id="error" class="alert alert--error" hidden></div>
+    <div id="mstNote" class="alert" hidden></div>
+
+    <div class="panel">
+      <h3 id="mstFormLegend">Добавить мастера</h3>
+      <form id="mstForm" novalidate>
+        <input type="hidden" id="mstId">
+        <div class="adm-form-grid">
+          <div class="field">
+            <label for="mstName">Имя</label>
+            <input id="mstName" autocomplete="off">
+            <span class="field__error" hidden></span>
+          </div>
+          <div class="field">
+            <label for="mstRole">Специализация</label>
+            <input id="mstRole" placeholder="Мастер маникюра">
+            <span class="field__error" hidden></span>
+          </div>
+          <div class="field">
+            <label for="mstExp">Опыт, лет</label>
+            <input id="mstExp" type="number" min="0" step="1">
+            <span class="field__error" hidden></span>
+          </div>
+        </div>
+        <label class="adm-services-pick__label" for="mstServices">Какие услуги выполняет</label>
+        <div id="mstServices" class="adm-checks"></div>
+        <label class="adm-check">
+          <input type="checkbox" id="mstActive" checked> Мастер активен — клиенты видят его в записи
+        </label>
+        <div class="form-actions adm-form-actions--row">
+          <button type="submit" class="btn btn--primary btn--md">Сохранить мастера</button>
+          <button type="button" class="btn btn--ghost btn--md" id="mstReset" hidden>Отменить редактирование</button>
+        </div>
+      </form>
+      <p class="adm-sub">Имя и специализация — минимум по 2 символа, опыт — неотрицательное
+        целое. Проверяет сервер: <code>POST /api/admin/masters</code>,
+        <code>PATCH /api/admin/masters/:id</code>.</p>
+    </div>
+
+    <div class="panel">
+      <h3>Все мастера</h3>
+      <div id="mstList"></div>
     </div>
   </main>
 
   <script src="/js/api.js"></script>
   <script src="/js/admin-shell.js"></script>
+  <script src="/js/admin-masters.js"></script>
 </body>
 </html>

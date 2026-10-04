@@ -16,16 +16,60 @@
 
   <main class="container">
     <h1 class="adm__title">Услуги</h1>
-    <p class="adm__lead">Каталог студии: названия, описания, цены и длительность.</p>
+    <p class="adm__lead">Каталог студии. Отключённые услуги клиенту не предлагаются,
+      но здесь они остаются в списке — вместе с записями, которые на них ссылаются.</p>
 
     <div id="admin-menu"></div>
 
-    <div class="empty-state">
-      <p>Услуги пока не показаны. Данные пока не подключены.</p>
+    <div id="error" class="alert alert--error" hidden></div>
+    <div id="svcNote" class="alert" hidden></div>
+
+    <div class="panel">
+      <h3 id="svcFormLegend">Добавить услугу</h3>
+      <form id="svcForm" novalidate>
+        <input type="hidden" id="svcId">
+        <div class="adm-form-grid">
+          <div class="field">
+            <label for="svcName">Название</label>
+            <input id="svcName" autocomplete="off">
+            <span class="field__error" hidden></span>
+          </div>
+          <div class="field">
+            <label for="svcPrice">Цена, ₽</label>
+            <input id="svcPrice" type="number" min="0.01" step="0.01">
+            <span class="field__error" hidden></span>
+          </div>
+          <div class="field">
+            <label for="svcDuration">Длительность, мин</label>
+            <input id="svcDuration" type="number" min="1" step="1">
+            <span class="field__error" hidden></span>
+          </div>
+        </div>
+        <div class="field">
+          <label for="svcDesc">Описание</label>
+          <textarea id="svcDesc" rows="2"></textarea>
+        </div>
+        <label class="adm-check">
+          <input type="checkbox" id="svcActive" checked> Услуга активна — её видно клиенту
+        </label>
+        <div class="form-actions adm-form-actions--row">
+          <button type="submit" class="btn btn--primary btn--md">Сохранить услугу</button>
+          <button type="button" class="btn btn--ghost btn--md" id="svcReset" hidden>Отменить редактирование</button>
+        </div>
+      </form>
+      <p class="adm-sub">Название — минимум 2 символа, цена и длительность — больше нуля.
+        Проверяет сервер: <code>POST /api/admin/services</code>,
+        <code>PATCH /api/admin/services/:id</code>.</p>
+    </div>
+
+    <div class="panel">
+      <h3>Все услуги</h3>
+      <div id="svcList"></div>
     </div>
   </main>
 
   <script src="/js/api.js"></script>
   <script src="/js/admin-shell.js"></script>
+  <script src="/js/admin-services.js"></script>
 </body>
 </html>

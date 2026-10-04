@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 // Административные эндпоинты — только для роли owner.
 
@@ -18,6 +18,8 @@ router.use(requireRole('owner'));
 // ---------- Записи ----------
 
 // GET /admin/bookings — все записи с фильтрами: ?status=&from=&to=&master_id=
+// и постраничностью ?limit=&offset=. По умолчанию отдаём всё: пока история
+// студии умещается в один ответ, а владелец смотрит её одним списком.
 router.get(
   '/bookings',
   asyncH(async (req, res) => {
@@ -27,8 +29,17 @@ router.get(
     const masterId = req.query.master_id === undefined ? null : v.intId(req.query.master_id, 'master_id');
     const fromLocal = req.query.from === undefined ? undefined : toDbLocal(parseUtcIso(req.query.from));
     const toLocal = req.query.to === undefined ? undefined : toDbLocal(parseUtcIso(req.query.to));
-    const bookings = q.listBookings({ status, masterId, fromLocal, toLocal });
-    return res.json({ bookings });
+    const limit = req.query.limit === undefined ? null : v.boundedInt(req.query.limit, 'limit', 1, 200);
+    const offset = req.query.offset === undefined ? 0 : v.boundedInt(req.query.offset, 'offset', 0, 1000000);
+
+    const filter = { status, masterId, fromLocal, toLocal };
+    // total считаем по тем же фильтрам, но без limit/offset — по нему экран
+    // понимает, сколько страниц осталось и на какой он сейчас.
+    const total = q.countBookings(filter);
+    const bookings = q.listBookings(limit === null
+      ? filter
+      : { ...filter, limit, offset });
+    return res.json({ bookings, total, limit: limit === null ? total : limit, offset });
   })
 );
 
@@ -76,8 +87,14 @@ router.post(
   '/services',
   asyncH(async (req, res) => {
     const name = v.str(req.body.name, 'name', { min: 2, max: 100 });
-    const description = v.str(req.body.description, 'description', { max: 500 });
-    const priceKopecks = v.nonNegInt(req.body.price_kopecks, 'price_kopecks');
+    // Описание необязательное: колонка description NOT NULL, но пустая строка
+    // допустима, и каталог её так и рисует («s.description || ''»). Поэтому
+    // min: 0, а не требование минимум одного символа.
+    const description = v.str(req.body.description ?? '', 'description', { min: 0, max: 500 });
+    // Цена и длительность — строго положительные: нулевая цена в прайсе означала бы
+    // «бесплатную услугу», а нулевая длительность — слот нулевой длины, который
+    // сломал бы расписание. Проверка на сервере, а не только в форме.
+    const priceKopecks = v.positiveInt(req.body.price_kopecks, 'price_kopecks');
     const durationMinutes = v.positiveInt(req.body.duration_minutes, 'duration_minutes');
     const isActive = v.bool(req.body.is_active, 'is_active') ?? 1;
 
@@ -101,8 +118,8 @@ router.patch(
     if (!existing) return res.status(404).json({ error: { message: 'Услуга не найдена.', code: 'NOT_FOUND' } });
 
     const name = req.body.name === undefined ? existing.name : v.str(req.body.name, 'name', { min: 2, max: 100 });
-    const description = req.body.description === undefined ? existing.description : v.str(req.body.description, 'description', { max: 500 });
-    const priceKopecks = req.body.price_kopecks === undefined ? existing.price_kopecks : v.nonNegInt(req.body.price_kopecks, 'price_kopecks');
+    const description = req.body.description === undefined ? existing.description : v.str(req.body.description, 'description', { min: 0, max: 500 });
+    const priceKopecks = req.body.price_kopecks === undefined ? existing.price_kopecks : v.positiveInt(req.body.price_kopecks, 'price_kopecks');
     const durationMinutes = req.body.duration_minutes === undefined ? existing.duration_minutes : v.positiveInt(req.body.duration_minutes, 'duration_minutes');
     const isActive = req.body.is_active === undefined ? existing.is_active : v.bool(req.body.is_active, 'is_active');
 
@@ -117,32 +134,46 @@ router.patch(
   })
 );
 
-// DELETE /admin/services/:id — удалить услугу (только если на неё нет записей)
+// DELETE /admin/services/:id — удалить услугу, если на неё никто не ссылается.
+// Если записи есть, строка НЕ удаляется, а отключается: решение принимает сервер,
+// клиентский интерфейс только показывает объяснение (disabled вместо удалено).
 router.delete(
   '/services/:id',
   asyncH(async (req, res) => {
     const id = v.intId(req.params.id, 'id');
-    if (!q.serviceById(id)) return res.status(404).json({ error: { message: 'Услуга не найдена.', code: 'NOT_FOUND' } });
+    const existing = q.serviceById(id);
+    if (!existing) return res.status(404).json({ error: { message: 'Услуга не найдена.', code: 'NOT_FOUND' } });
     // Записи могли остаться на услугу и в составе комплекса (booking_services),
     // поэтому проверяем оба места — иначе удаление упрётся в FK без понятного
     // ответа клиенту.
-    const hasBookings = db
-      .prepare(`
-        SELECT 1 AS hit FROM bookings WHERE service_id = ? LIMIT 1`)
-      .get(id)
-      || db
-        .prepare('SELECT 1 AS hit FROM booking_services WHERE service_id = ? LIMIT 1')
-        .get(id);
-    if (hasBookings) {
-      return res.status(409).json({
-        error: { message: 'Нельзя удалить услугу с записями — отключите её.', code: 'SERVICE_IN_USE' },
+    const count = q.countBookingsWithService(id);
+    if (count > 0) {
+      // Отключаем, а не отказываем: история записей ссылается на услугу, и её
+      // удаление сломало бы и прошлые записи, и наборы услуг мастеров.
+      if (existing.is_active !== 1) {
+        return res.json({
+          service: q.serviceById(id),
+          outcome: 'already_disabled',
+          bookings_count: count,
+          message: `Услуга «${existing.name}» отключена, а не удалена: по ней ${count} ${records(count)}. Историю удалить нельзя — записи её хранят.`,
+        });
+      }
+      db.prepare('UPDATE services SET is_active = 0, updated_at = ? WHERE id = ?').run(nowDbLocal(), id);
+      return res.json({
+        service: q.serviceById(id),
+        outcome: 'disabled',
+        bookings_count: count,
+        message: `Услуга «${existing.name}» не удалена, а отключена: по ней ${count} ${records(count)}. Клиентам она больше не предлагается, история записей сохранена.`,
       });
     }
     db.transaction(() => {
       db.prepare('DELETE FROM master_services WHERE service_id = ?').run(id);
       db.prepare('DELETE FROM services WHERE id = ?').run(id);
     })();
-    return res.status(204).end();
+    return res.json({
+      outcome: 'deleted',
+      message: `Услуга «${existing.name}» удалена: записей по ней не было.`,
+    });
   })
 );
 
@@ -206,14 +237,32 @@ router.patch(
   })
 );
 
-// DELETE /admin/masters/:id — удалить мастера (только если нет записей)
+// DELETE /admin/masters/:id — удалить мастера, если на него никто не ссылается.
+// Если записи есть, мастер не удаляется, а отключается: решение на сервере,
+// ответ объясняет, что произошло.
 router.delete(
   '/masters/:id',
   asyncH(async (req, res) => {
     const id = v.intId(req.params.id, 'id');
-    if (!q.masterById(id)) return res.status(404).json({ error: { message: 'Мастер не найден.', code: 'NOT_FOUND' } });
-    if (q.countBookingsFor(id) > 0) {
-      return res.status(409).json({ error: { message: 'У мастера есть записи — отключите его, а не удаляйте.', code: 'MASTER_IN_USE' } });
+    const existing = q.masterById(id);
+    if (!existing) return res.status(404).json({ error: { message: 'Мастер не найден.', code: 'NOT_FOUND' } });
+    const count = q.countBookingsFor(id);
+    if (count > 0) {
+      if (existing.is_active !== 1) {
+        return res.json({
+          master: publicMaster(id),
+          outcome: 'already_disabled',
+          bookings_count: count,
+          message: `Мастер «${existing.name}» отключён, а не удалён: по нему ${count} ${records(count)}. Историю удалить нельзя — записи её хранят.`,
+        });
+      }
+      db.prepare('UPDATE masters SET is_active = 0, updated_at = ? WHERE id = ?').run(nowDbLocal(), id);
+      return res.json({
+        master: publicMaster(id),
+        outcome: 'disabled',
+        bookings_count: count,
+        message: `Мастер «${existing.name}» не удалён, а отключён: по нему ${count} ${records(count)}. Клиенты его больше не видят, история записей сохранена.`,
+      });
     }
     db.transaction(() => {
       db.prepare('DELETE FROM master_services WHERE master_id = ?').run(id);
@@ -222,7 +271,10 @@ router.delete(
       db.prepare('UPDATE users SET master_id = NULL WHERE master_id = ?').run(id);
       db.prepare('DELETE FROM masters WHERE id = ?').run(id);
     })();
-    return res.status(204).end();
+    return res.json({
+      outcome: 'deleted',
+      message: `Мастер «${existing.name}» удалён: записей по нему не было.`,
+    });
   })
 );
 
@@ -372,6 +424,19 @@ router.get(
   })
 );
 
+// GET /admin/stats/period — то же за выбранный период (?from=&to=, салонное
+// время в UTC ISO) плюс разбивка по мастерам и дням. Отдельный эндпоинт, а не
+// параметр у /stats: текущий дашборд открывается без дат и должен остаться
+// дешёвым «сколько всего», период считается только когда его попросили.
+router.get(
+  '/stats/period',
+  asyncH(async (req, res) => {
+    const fromLocal = req.query.from === undefined ? null : toDbLocal(parseUtcIso(req.query.from));
+    const toLocal = req.query.to === undefined ? null : toDbLocal(parseUtcIso(req.query.to));
+    return res.json(q.statsPeriod({ fromLocal, toLocal }));
+  })
+);
+
 // ---------- Обратная связь клиентов ----------
 
 // GET /admin/feedback — все отзывы с фильтром ?status=new|read|answered
@@ -399,6 +464,18 @@ router.patch(
 );
 
 // Вспомогательные функции
+
+// Окончание для счётчика записей: 1 запись, 2 записи, 5 записей. Сообщение о
+// блокировке удаления читает администратор, поэтому «1 записей» смотрится как
+// ошибка в тексте.
+function records(n) {
+  const mod100 = n % 100;
+  const mod10 = n % 10;
+  if (mod100 >= 11 && mod100 <= 14) return 'записей';
+  if (mod10 === 1) return 'запись';
+  if (mod10 >= 2 && mod10 <= 4) return 'записи';
+  return 'записей';
+}
 
 function attachServices(masterId, serviceIds) {
   const ins = db.prepare('INSERT INTO master_services (master_id, service_id) VALUES (?, ?)');
@@ -428,7 +505,9 @@ function publicMaster(id) {
     experience_years: m.experience_years,
     is_active: !!m.is_active,
     photo_path: m.photo_path,
-    services: q.servicesOfMaster(id),
+    // Панели владельца полный набор услуг, включая отключённые: связь должна
+    // быть видна и снимаема, иначе отметка исчезла бы молча.
+    services: q.servicesOfMaster(id, { activeOnly: false }),
   };
 }
 
