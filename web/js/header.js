@@ -26,8 +26,11 @@
     if (roles.indexOf('client') !== -1) {
       links += '<a href="appointments.html">Мои записи</a>';
     }
+    // Пункт «Панель владельца» — только для роли owner. Это скрытие пункта
+    // меню, а не защита: доступ к разделу /admin проверяет сервер
+    // (routes/admin-pages.js), поэтому клиент без роли owner получит 403.
     if (roles.indexOf('owner') !== -1) {
-      links += '<a href="admin.html">Панель владельца</a>';
+      links += '<a href="/admin">Панель владельца</a>';
     }
 
     var auth;

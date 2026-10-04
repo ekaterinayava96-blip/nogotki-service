@@ -50,10 +50,11 @@
       var password = document.getElementById('login-password');
       var submit = form.querySelector('button[type="submit"]');
 
-      // Уже вошли (кука есть) — сразу туда, откуда пришли (returnTo),
-      // иначе в кабинет, с паролем не дёргаем сервер.
+// Уже вошли (кука есть) — сразу туда, откуда пришли (returnTo),
+      // иначе по роли: владельцу раздел администратора, остальным кабинет.
+      // С паролем сервер не дёргаем.
       window.api.me().then(function (user) {
-        if (user) window.ui.afterAuth();
+        if (user) window.ui.afterAuth(window.ui.homeFor(user));
       });
 
       function fieldBox(input) {
@@ -107,9 +108,11 @@
         if (!ok) return;
 
         submit.disabled = true;
+        // Ответ логина несёт user.roles — по нему решаем, куда отправить:
+        // владельцу раздел администратора, клиенту кабинет.
         window.api.request('/api/auth/login', { method: 'POST', json: body })
-          .then(function () {
-            window.ui.afterAuth();
+          .then(function (data) {
+            window.ui.afterAuth(window.ui.homeFor(data && data.user));
           })
           .catch(function (err) {
             submit.disabled = false;

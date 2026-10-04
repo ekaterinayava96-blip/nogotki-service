@@ -12,6 +12,7 @@ const holdsRoutes = require('./routes/holds');
 const bookingRoutes = require('./routes/bookings');
 const feedbackRoutes = require('./routes/feedback');
 const adminRoutes = require('./routes/admin');
+const adminPageRoutes = require('./routes/admin-pages');
 
 const app = express();
 
@@ -39,6 +40,11 @@ app.use('/api', holdsRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/admin', adminRoutes);
+
+// Страницы раздела администратора (/admin, /admin/*). Монтируются ДО статики
+// web/: проверка роли owner живёт в роутере, и если поставить его после
+// express.static, статика отдала бы файлы раздела любому посетителю.
+app.use(adminPageRoutes);
 
 // Боевой веб-фронтенд: статика из web/. Монтируется раньше чернового
 // backend/public, чтобы корень '/' отдавал боевой лендинг (web/index.html).

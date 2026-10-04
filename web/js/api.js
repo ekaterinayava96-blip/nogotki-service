@@ -174,8 +174,15 @@
       var v = String(value == null ? '' : value);
       return /^[\w.\-]+\.html(\?[\w.\-=&%]*)?$/.test(v) ? v : fallback;
     },
+    // Куда отправить после входа: владельцу — раздел администратора,
+    // остальным — кабинет клиента. Роль приходит списком, поэтому проверяем
+    // НАЛИЧИЕ 'owner', а не равенство: у пользователя может быть несколько ролей.
+    homeFor: function (user) {
+      var roles = user && Array.isArray(user.roles) ? user.roles : [];
+      return roles.indexOf('owner') !== -1 ? '/admin' : 'appointments.html';
+    },
     // Куда отправить после успешного входа/регистрации: адрес из returnTo,
-    // иначе кабинет.
+    // иначе cabinet (fallback подставляет вызывающий — см. homeFor).
     afterAuth: function (fallback) {
       var q = new URLSearchParams(window.location.search).get('returnTo');
       window.location.href = window.ui.safePath(q, fallback || 'appointments.html');

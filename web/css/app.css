@@ -652,6 +652,9 @@ body.is-modal-open { overflow: hidden; }
 }
 .adm-filters select:focus { outline: none; border-color: var(--color-button-primary); box-shadow: 0 0 0 3px var(--color-border); }
 .adm-filters__actions { display: flex; align-items: flex-end; }
+/* Один фильтр (например, состояние обращений) — во всю ширину, а не колонкой
+   из пяти с пустыми ячейками. */
+.adm-filters--slim { grid-template-columns: minmax(0, 260px); }
 
 .adm-loading { margin-bottom: var(--space-5); }
 .adm-table-wrap { overflow-x: auto; padding: var(--space-2); }
@@ -672,6 +675,141 @@ body.is-modal-open { overflow: hidden; }
 .adm-settings .field { margin-bottom: 0; }
 .adm-settings .field:first-child { max-width: 260px; }
 .adm-settings__save { padding-bottom: 2px; }
+
+/* ---------- Панель владельца: разделы, формы, расписание ---------- */
+.adm { padding: var(--space-7) 0; }
+.adm__title { margin-bottom: var(--space-2); }
+.adm__lead { margin: 0 0 var(--space-6); color: var(--color-text-muted); }
+.adm__tabs { display: flex; width: 100%; margin-bottom: var(--space-6); }
+.adm__tabs .tabs__tab { flex: 1; justify-content: center; white-space: nowrap; }
+.tabpane > .panel { margin-bottom: var(--space-5); }
+
+.adm-split { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: var(--space-5); }
+
+.adm-period { display: grid; grid-template-columns: repeat(2, minmax(0, 200px)) minmax(0, 1fr); gap: var(--space-4); align-items: end; }
+.adm-period .field { margin-bottom: 0; }
+.adm-period__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+/* Столбики «загрузки» и «потока по дням»: ширину полосы задаёт inline-стиль,
+   высоту и цвет — здесь, чтобы разметка оставалась чистой. */
+.adm-bar { margin-bottom: var(--space-4); }
+.adm-bar:last-child { margin-bottom: 0; }
+.adm-bar__head { display: flex; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-2); font-size: var(--font-size-sm); }
+.adm-bar__label { color: var(--color-text-primary); }
+.adm-bar__value { color: var(--color-text-muted); white-space: nowrap; }
+.adm-bar__track { height: 10px; border-radius: var(--radius-full); background: var(--color-bg-subtle); overflow: hidden; }
+.adm-bar__fill { height: 100%; border-radius: var(--radius-full); background: var(--color-button-primary); }
+
+.adm-pager { display: flex; justify-content: space-between; align-items: center; gap: var(--space-4); flex-wrap: wrap; margin-top: var(--space-4); }
+.adm-pager__info { color: var(--color-text-muted); font-size: var(--font-size-sm); }
+.adm-pager__nav { display: flex; align-items: center; gap: var(--space-3); }
+.adm-pager__size { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--color-text-muted); font-size: var(--font-size-sm); }
+.adm-pager__size select {
+  padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm);
+  border: 1.5px solid var(--color-border-strong); background: var(--color-bg-surface);
+  font-family: var(--font-family-body); font-size: var(--font-size-sm); color: var(--color-text-primary);
+}
+
+.adm-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-4); }
+.adm-form-grid .field { margin-bottom: 0; }
+.adm-form-actions--row { flex-direction: row; align-items: center; }
+.adm-form-actions--row .btn { width: auto; }
+.adm-check { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-4); color: var(--color-text-primary); font-size: var(--font-size-sm); }
+.adm-check input { width: 18px; height: 18px; accent-color: var(--color-button-primary); }
+.adm-check--inline { display: inline-flex; margin: 0 var(--space-4) var(--space-2) 0; }
+.adm-checks { display: flex; flex-wrap: wrap; }
+.adm-services-pick__label { display: block; margin-bottom: var(--space-3); font-weight: 700; color: var(--color-text-heading); font-size: var(--font-size-sm); }
+/* Описание услуги — тот же контрол, что и остальные поля формы. */
+.field textarea {
+  padding: 13px var(--space-4); border-radius: var(--radius-md);
+  border: 1.5px solid var(--color-border-strong); background: var(--color-bg-surface);
+  font-family: var(--font-family-body); font-size: var(--font-size-body); color: var(--color-text-primary);
+  width: 100%; resize: vertical;
+}
+.field textarea:focus {
+  outline: none; border-color: var(--color-button-primary); box-shadow: 0 0 0 3px var(--color-border);
+}
+
+.adm-schedule__master { max-width: 320px; }
+.adm-schedule__hint { margin-bottom: var(--space-4); }
+.adm-schedule__save { margin-top: 0; }
+.adm-week { border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; }
+.adm-week__row {
+  display: grid; grid-template-columns: 140px 1fr auto 1fr; gap: var(--space-3); align-items: center;
+  padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-surface);
+}
+.adm-week__row:last-child { border-bottom: none; }
+.adm-week__row.is-on { background: var(--color-bg-subtle); }
+.adm-week__day { display: flex; align-items: center; gap: var(--space-2); font-weight: 700; color: var(--color-text-heading); font-size: var(--font-size-sm); }
+.adm-week__day input { width: 18px; height: 18px; accent-color: var(--color-button-primary); }
+.adm-week__time {
+  padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm);
+  border: 1.5px solid var(--color-border-strong); background: var(--color-bg-surface);
+  font-family: var(--font-family-body); font-size: var(--font-size-sm); color: var(--color-text-primary);
+}
+.adm-week__time:disabled { opacity: .45; }
+.adm-week__dash { color: var(--color-text-muted); }
+
+.adm-block-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-4); align-items: end; margin-bottom: var(--space-4); }
+.adm-block-form .field { margin-bottom: 0; }
+.adm-block-form__add { display: flex; align-items: end; }
+.adm-blocks-filter { display: flex; gap: var(--space-4); align-items: end; margin-bottom: var(--space-4); }
+.adm-blocks-filter .field { margin-bottom: 0; }
+.adm-block {
+  display: flex; align-items: center; gap: var(--space-4);
+  padding: var(--space-3) var(--space-4); border: 1px solid var(--color-border);
+  border-radius: var(--radius-md); margin-bottom: var(--space-3);
+}
+.adm-block__when { font-weight: 700; color: var(--color-text-heading); }
+.adm-block__reason { color: var(--color-text-muted); font-size: var(--font-size-sm); }
+.adm-block__del { margin-left: auto; }
+
+.adm-fb { margin-bottom: var(--space-4); }
+.adm-fb__head { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-3); }
+.adm-fb__head .adm-sub { display: inline; }
+.adm-fb__text { color: var(--color-text-primary); font-size: var(--font-size-sm); line-height: 1.55; white-space: pre-wrap; margin-bottom: var(--space-3); }
+.adm-fb__actions { display: flex; gap: var(--space-2); }
+
+/* ---------- Раздел администратора: шапка и меню (/admin) ----------
+   Каркас страниц раздела (web/admin/*.html, web/js/admin-shell.js).
+   Все значения — из tokens.css, новых цветов и размеров здесь нет. */
+
+.adm-top {
+  background: var(--color-bg-surface);
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: var(--space-6);
+}
+.adm-top__inner {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-4); padding: var(--space-4) 0;
+}
+.adm-top__right { display: flex; align-items: center; gap: var(--space-3); }
+.adm-top__who { color: var(--color-text-muted); font-size: var(--font-size-sm); }
+
+.adm-menu {
+  display: flex; flex-wrap: wrap; gap: var(--space-2);
+  margin-bottom: var(--space-6);
+}
+.adm-menu__link {
+  display: inline-flex; align-items: center;
+  padding: var(--space-2) var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font-weight: 700; font-size: var(--font-size-sm);
+  text-decoration: none;
+}
+.adm-menu__link:hover {
+  background: var(--color-button-secondary-hover);
+  color: var(--color-button-secondary-text);
+}
+.adm-menu__link[aria-current="page"] {
+  background: var(--color-button-primary);
+  border-color: var(--color-button-primary);
+  color: var(--color-button-primary-text);
+}
 
 /* ---------- АДАПТИВ: УЗКИЙ ЭКРАН (ТЕЛЕФОН) ----------
    Правило: в этом блоке только то, что на телефоне не помещается, не
@@ -816,4 +954,19 @@ body.is-modal-open { overflow: hidden; }
   .adm-settings { flex-direction: column; align-items: stretch; }
   .adm-settings .field:first-child { max-width: none; }
   .adm-settings__save .btn { width: 100%; }
+  /* Семь вкладок не помещаются в телефон одной строкой — пусть прокручиваются,
+     иначе половина разделов уезжает за край экрана. */
+  .adm__tabs { overflow-x: auto; }
+  .adm__tabs .tabs__tab { flex: 0 0 auto; }
+  .adm-period { grid-template-columns: minmax(0, 1fr); }
+  .adm-period__actions .btn { width: 100%; }
+  .adm-week__row { grid-template-columns: 92px 1fr auto 1fr; padding: var(--space-3); }
+  .adm-block-form { grid-template-columns: minmax(0, 1fr); }
+  .adm-block-form__add .btn { width: 100%; }
+  .adm-block { flex-wrap: wrap; gap: var(--space-2); }
+  .adm-block__del { margin-left: 0; width: 100%; }
+.adm-pager { flex-direction: column; align-items: stretch; }
+.adm-pager__nav { justify-content: space-between; }
+.adm-top__inner { flex-direction: column; align-items: flex-start; }
+.adm-top__right { flex-wrap: wrap; }
 }
