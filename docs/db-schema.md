@@ -305,12 +305,41 @@ CREATE TABLE studio_closures (
 | `comment` | TEXT | NULL | Пожелания клиента |
 | `source` | TEXT | NOT NULL, DEFAULT 'web' | Откуда пришла запись (`web` / `telegram`) |
 | `force_override` | INTEGER | NOT NULL, DEFAULT 0 | Признак осознанного наложения (0/1) — запись создана поверх занятого времени администратором (`owner`) |
+| `canceled_by` | INTEGER | NULL | FK → users.id — кто отменил. NULL значит «отменил сам клиент» |
+| `canceled_reason` | TEXT | NULL | Почему отменили. Для отмены сотрудником обязательна |
+| `canceled_at` | TEXT | NULL | Когда отменили |
+| `conflict_note` | TEXT | NULL | Пояснение администратора: почему на это время два визита |
 | `created_at` | TEXT | NOT NULL | Когда создана запись |
 | `updated_at` | TEXT | NULL | Когда изменялась |
+
+Колонки `canceled_by` / `canceled_reason` / `canceled_at` / `conflict_note` добавлены **миграцией 010**.
 
 **UNIQUE:** `(master_id, starts_at)` — только для активных записей **без** `force_override` (частичный индекс `idx_bookings_active_start`): обычная запись не может *начинаться* в тот же момент, что и другая активная обычная запись мастера; записи с `force_override = 1` и отменённые этот индекс не видит.
 
 **FK:** `client_id`, `service_id`, `master_id` (удаление записей при удалении услуги — `ON DELETE RESTRICT`: запись удалять нельзя, услугу — только если на неё нет записей).
+
+**Отмена не удаляет строку.** Запись остаётся в базе со статусом `canceled` — поэтому клиент видит визит как отменённый, а не потерянный. Время освобождается само: `getBusyIntervals()` отбирает записи по `status != 'canceled'`. Кто и почему отменил — в `canceled_by` и `canceled_reason`; при отмене сотрудником причина обязательна.
+
+**Перенос меняет время той же строки.** Новой записи не создаётся, `client_id` прежний, поэтому клиент получает одно уведомление, а не два. Кто, откуда и куда переносил — в `booking_moves` (§3.8.2).
+
+**Запись поверх занятого времени** (`force_override = 1`) не отключает проверку занятости: первый запрос с `force_override` получает 409 с признаком `can_force` и ничего не создаёт, запись появляется только на втором, с подтверждением. `conflict_note` объясняет в панели, почему на это время два визита; сам панельный признак двойной записи считается на лету (`bookingHasOverlap()`), он не зависит от `force_override`.
+
+### 3.8.2. `booking_moves` — журнал переносов (миграция 010)
+
+| Поле | Тип | Обяз. | Описание |
+|---|---|---|---|
+| `id` | INTEGER | PK, AUTOINCREMENT | Идентификатор переноса |
+| `booking_id` | INTEGER | NOT NULL, FK | → bookings.id, `ON DELETE CASCADE` |
+| `from_at` | TEXT | NOT NULL | Откуда перенесли (dbLocal, `YYYY-MM-DD HH:MM:SS`) |
+| `to_at` | TEXT | NOT NULL | Куда перенесли |
+| `from_master` | INTEGER | NULL | FK → masters.id — мастер до переноса |
+| `to_master` | INTEGER | NULL | FK → masters.id — мастер после (NULL = не менялся) |
+| `moved_by` | INTEGER | NULL | FK → users.id — кто перенёс |
+| `created_at` | TEXT | NOT NULL | Когда |
+
+**Индекс** `idx_booking_moves_booking` по `(booking_id, created_at)` — журнал записи читается целиком.
+
+**Зачем журнал, если время меняется в самой записи:** по строке `bookings` видно только «сейчас 15:30», а не «было 10:00 и перенёс qa_admin». Повторные переносы не затирают друг друга — каждый даёт свою строку.
 
 **Вычисление свободных слотов (требование 3):**
 Свободный слот для мастера M на момент времени T считается запросом, а не хранится:
@@ -597,7 +626,50 @@ CREATE TABLE payments (
 
 **FK:** `client_id` → clients.id.
 
+### 3.14. `notifications` — уведомления в кабинете (миграция 011)
+
+Что произошло с записью **помимо воли клиента**. Создаются только при действиях
+администратора — когда клиент отменяет или переносит визит сам, уведомления нет:
+он и так знает, что сделал.
+
+| Поле | Тип | Обяз. | Описание |
+|---|---|---|---|
+| `id` | INTEGER | PK, AUTOINCREMENT | Идентификатор уведомления |
+| `user_id` | INTEGER | NOT NULL, FK | → users.id — **кому** показываем. Именно пользователю, а не клиенту: уведомление видит тот, кто вошёл в кабинет |
+| `type` | TEXT | NOT NULL, CHECK | `booking_canceled` — отмена администратором, `booking_moved` — перенос администратором, `booking_conflict` — на это время назначен ещё один визит |
+| `text` | TEXT | NOT NULL | Готовый текст с конкретными днём и временем на момент события |
+| `booking_id` | INTEGER | NULL, FK | → bookings.id, `ON DELETE CASCADE`. Ссылка ведёт на детальную страницу записи |
+| `is_read` | INTEGER | NOT NULL, DEFAULT 0 | 0 — непрочитано, 1 — прочитано |
+| `created_at` | TEXT | NOT NULL | Момент создания |
+
+**Индексы:** `idx_notifications_user (user_id, created_at DESC)` — список с
+сортировкой по свежести; `idx_notifications_unread (user_id) WHERE is_read = 0` —
+счётчик непрочитанных.
+
+**Текст пишется сразу при создании** и содержит дату и время («Запись на среду,
+13:00 перенесена на четверг, 14:00»), а не общие слова вроде «Ваша запись
+изменена». День недели ставится в винительном падеже с маленькой буквы — так он
+встаёт в предложение.
+
+**Счётчик и список отдаются вместе** (`GET /api/notifications`): отдельный запрос
+ради одного числа не делается, потому что экран уведомлений всё равно забирает
+список.
+
 ```sql
+CREATE TABLE notifications (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type       TEXT NOT NULL
+    CHECK (type IN ('booking_canceled','booking_moved','booking_conflict')),
+  text       TEXT NOT NULL,
+  booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE,
+  is_read    INTEGER NOT NULL DEFAULT 0 CHECK (is_read IN (0, 1)),
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX idx_notifications_user ON notifications(user_id, created_at DESC);
+CREATE INDEX idx_notifications_unread ON notifications(user_id) WHERE is_read = 0;
+
 CREATE TABLE client_feedback (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   client_id  INTEGER NOT NULL REFERENCES clients(id),
@@ -725,6 +797,11 @@ CREATE TABLE bookings (
   source        TEXT NOT NULL DEFAULT 'web' CHECK (source IN ('web','telegram')),
   force_override INTEGER NOT NULL DEFAULT 0
     CHECK (force_override IN (0, 1)),
+  -- миграция 010: след отмены и пояснение к наложению
+  canceled_by    INTEGER REFERENCES users(id),
+  canceled_reason TEXT,
+  canceled_at    TEXT,
+  conflict_note  TEXT,
   created_at    TEXT NOT NULL,
   updated_at    TEXT,
   CHECK (ends_at > starts_at)
@@ -732,6 +809,26 @@ CREATE TABLE bookings (
 
 CREATE UNIQUE INDEX idx_bookings_active_start ON bookings(master_id, starts_at)
   WHERE status != 'canceled' AND force_override = 0;
+
+CREATE INDEX idx_bookings_canceled ON bookings(canceled_at)
+  WHERE status = 'canceled';
+
+CREATE INDEX idx_bookings_forced ON bookings(starts_at)
+  WHERE force_override = 1;
+
+-- миграция 010: журнал переносов
+CREATE TABLE booking_moves (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  booking_id  INTEGER NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+  from_at     TEXT NOT NULL,
+  to_at       TEXT NOT NULL,
+  from_master INTEGER REFERENCES masters(id),
+  to_master   INTEGER REFERENCES masters(id),
+  moved_by    INTEGER REFERENCES users(id),
+  created_at  TEXT NOT NULL
+);
+
+CREATE INDEX idx_booking_moves_booking ON booking_moves(booking_id, created_at);
 
 CREATE TABLE users (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,

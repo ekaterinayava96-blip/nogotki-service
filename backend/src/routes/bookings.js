@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 // Записи: создание (в т.ч. по удержанию), просмотр своих, детали,
 // перенос и отмена.
@@ -13,6 +13,7 @@ const v = require('../lib/validate');
 const { asyncH, isBookingTimeConflict, sendSlotConflict } = require('../lib/http');
 const { requireRole, authRequired, hasRole } = require('../middleware/auth');
 const { freeSlots } = require('../lib/availability');
+const notifications = require('../lib/notifications');
 
 const router = express.Router();
 
@@ -67,6 +68,11 @@ function sameIdSet(a, b) {
 // force_override (признак осознанного наложения) может выставить ТОЛЬКО
 // роль owner. Для client/master значение поля игнорируется намеренно:
 // брать его не принято (см. ниже), а не отклонять запрос с ошибкой.
+//
+// Запись поверх занятого времени делается в два шага. Первый запрос с
+// force_override=1 получает 409 с can_force: проверка занятости сработала и
+// запись не создана. Второй, с confirm=1, создаёт её. Один шаг не создаёт
+// ничего — передумать можно без последствий.
 router.post(
   '/',
   requireRole('client', 'master', 'owner'),
@@ -84,6 +90,10 @@ router.post(
     // поэтому это административная возможность. У client/master поле в запросе
     // просто не читается — эффект тот же, что и при отсутствии поля.
     const wantForce = v.bool(req.body.force_override, 'force_override');
+    const confirmed = v.bool(req.body.confirm, 'confirm');
+    const conflictNote = req.body.conflict_note === undefined
+      ? null
+      : v.str(req.body.conflict_note, 'conflict_note', { min: 3, max: 300 });
     const forceOverride = hasRole(req.user, 'owner') ? (wantForce ?? 0) : 0;
 
     // Услуги в порядке выбора клиента. Суммарная длительность набора —
@@ -185,6 +195,17 @@ router.post(
       // разрешает пересечение с другими записями мастера.
       const startUtc = assertNotPast(parseUtcIso(req.body.starts_at), 'starts_at');
       const endsAtUtc = new Date(startUtc.getTime() + totalMinutes * 60000);
+
+      // Запись поверх занятого времени — только владельцу и только после
+      // явного подтверждения. Проверка занятости не отключается: первый запрос
+      // с force_override=1 получает 409 с can_force и ничего не создаёт.
+      // Запись появляется лишь на втором, с confirm=1.
+      if (forceOverride && !(confirmed ?? 0)) {
+        return sendSlotConflict(res, masterId, totalMinutes, 'SLOT_BUSY', {
+          can_force: 1,
+          confirm_hint: 'Повторите с confirm=1 (и force_override=1), чтобы создать запись поверх занятого времени.',
+        });
+      }
       if (!forceOverride && !checkSlotFree(res, masterId, startUtc, totalMinutes)) return;
       startsLocal = toDbLocal(startUtc);
       endsLocal = toDbLocal(endsAtUtc);
@@ -207,6 +228,9 @@ router.post(
         return q.createBooking({
           clientId, serviceIds, masterId, startsAtLocal: startsLocal, endsAtLocal: endsLocal,
           comment, source: SOURCE, forceOverride,
+          // Запись поверх занятого сразу получает пометку «двойная», иначе в
+          // панели было бы видно два визита на одно время без объяснения.
+          conflictNote: forceOverride ? (conflictNote || 'Записано поверх занятого времени по решению администратора.') : null,
         });
       })();
     } catch (err) {
@@ -215,6 +239,25 @@ router.post(
         return sendSlotConflict(res, masterId, totalMinutes);
       }
       throw err;
+    }
+
+    // Случай 3: администратор создал запись поверх уже занятого времени.
+    // Уведомляем обе стороны: тому, чей визит создали («на ваше время»), и
+    // тому, у кого время заняли («на ваш визит»). Обычная запись без наложения
+    // уведомлений не даёт — клиент сам её только что оформил.
+    if (forceOverride) {
+      // Кто занимал это время ДО создания новой записи. Ищем по пересечению
+      // интервалов: прежний listBookings фильтровал по «начало попало в
+      // диапазон», и запись, начавшаяся РАНЬШЕ новой и длящаяся через это время,
+      // не находилась вовсе — пострадавший просто не получал уведомления.
+      // Список берём до вставки: после вставки новая запись сама попала бы в выдачу.
+      const occupied = q.overlappingBookings(masterId, startsLocal, endsLocal, bookingId);
+      // Пострадавших может быть несколько (длинный визит перекрыл два коротких) —
+      // уведомление получают все. Если пересечений нет, уведомлять некого:
+      // подтверждение было лишним, а второго визита не появилось.
+      occupied.forEach((other) => {
+        notifications.notifyBookingConflict(bookingId, other.id, true);
+      });
     }
 
     return res.status(201).json({ booking: q.serializedBooking(bookingId) });
@@ -319,27 +362,105 @@ router.patch(
       effectiveMasterId = masterId;
     }
 
-    const startUtc = assertNotPast(parseUtcIso(req.body.starts_at), 'starts_at');
+const startUtc = assertNotPast(parseUtcIso(req.body.starts_at), 'starts_at');
     const endUtc = new Date(startUtc.getTime() + totalMinutes * 60000);
-    if (!checkSlotFree(res, effectiveMasterId, startUtc, totalMinutes)) return;
+
+    // Перенос разрешён поверх занятого времени только владельцу, и только если
+    // он это подтвердил. Проверка занятости при этом НЕ отключается: без
+    // confirm она срабатывает и возвращает предупреждение с вариантами.
+    const wantForce = v.bool(req.body.force_override, 'force_override');
+    const confirmed = v.bool(req.body.confirm, 'confirm');
+    const isOwner = hasRole(req.user, 'owner');
+    const forceOverride = isOwner ? ((wantForce ?? 0) && (confirmed ?? 0) ? 1 : 0) : 0;
+
+    if (isOwner && (wantForce ?? 0) && !(confirmed ?? 0)) {
+      // Первая попытка: занято, но владелец может подтвердить. Отвечаем
+      // предупреждением, запись не создаём.
+      return sendSlotConflict(res, effectiveMasterId, totalMinutes, {
+        can_force: 1,
+        confirm_hint: 'Повторите с confirm=1 (и force_override=1), чтобы записать поверх занятого времени.',
+      });
+    }
+    if (!forceOverride && !checkSlotFree(res, effectiveMasterId, startUtc, totalMinutes)) return;
+
+    // Журнал переноса пишем ДО движения, иначе «откуда» уже не узнать.
+    const previousMaster = row.master_id;
+    const toLocal = toDbLocal(startUtc);
+    const toEndsLocal = toDbLocal(endUtc);
+
+    // Кто занимает это время ДО переноса. Ищем по пересечению интервалов, а не
+    // по «началу попало в диапазон»: запись, начавшаяся раньше и держащаяся
+    // через это время, вторым способом не находилась бы.
+    const occupied = forceOverride
+      ? q.overlappingBookings(effectiveMasterId, toLocal, toEndsLocal, bookingId)
+      : [];
+
+    // Перенос поверх занятого времени: помечаем запись как наложенную, иначе
+    // её не пустит idx_bookings_active_start (он не видит force_override = 1).
+    const finalNote = forceOverride
+      ? 'Запись перенесена поверх занятого времени по решению администратора.'
+      : null;
 
     try {
       db.transaction(() => {
-        q.moveBooking(bookingId, toDbLocal(startUtc), toDbLocal(endUtc), effectiveMasterId);
+        q.addBookingMove({
+          bookingId,
+          fromAtLocal: row.starts_at,
+          toAtLocal: toLocal,
+          fromMaster: previousMaster,
+          toMaster: effectiveMasterId !== previousMaster ? effectiveMasterId : previousMaster,
+          movedBy: req.user.id,
+        });
+        q.moveBooking(bookingId, toLocal, toEndsLocal, effectiveMasterId, {
+          forceOverride: forceOverride ? 1 : 0,
+          conflictNote: finalNote,
+        });
       })();
     } catch (err) {
-      // Триггер trg_bookings_no_overlap_update запретил перенос на занятое время.
+      // Поймано trg_bookings_no_overlap_update — занято, честно отказываем.
       if (isBookingTimeConflict(err)) {
         return sendSlotConflict(res, effectiveMasterId, totalMinutes);
       }
       throw err;
     }
 
-    return res.json({ booking: q.serializedBooking(bookingId) });
+    // Случай 2: администратор перенёс запись клиента. Уведомляем только когда
+    // перенос сделал НЕ сам клиент: клиентский кабинет ходит в тот же
+    // PATCH /bookings/:id, поэтому роль и сравниваем её здесь, а не по эндпоинту.
+    // Свой перенос клиенту не уведомляем — он и так только что его сделал.
+    if (isOwner) {
+      notifications.notifyBookingMoved(bookingId, row.starts_at, toLocal);
+      // Случай 3 на пути переноса: визит встал поверх чужого. Уведомление о
+      // наложении здесь тоже нужно — админка создаёт двойные записи именно
+      // переносом, и раньше пострадавший не узнавал ничего. Обе стороны
+      // получают своё уведомление: кому заняли время и чьё время заняли.
+      if (occupied.length) {
+        occupied.forEach((other) => {
+          notifications.notifyBookingConflict(bookingId, other.id, true);
+        });
+      }
+    }
+
+    return res.json({
+      booking: q.serializedBooking(bookingId),
+      moved: true,
+      // Клиент уведомляется об этом ОДНОМ посещении: новая запись не создавалась,
+      // поэтому второго уведомления не будет.
+      moved_from: row.starts_at,
+      moved_to: toLocal,
+      // true — запись легла поверх чужой: панель помечает её как «два визита».
+      forced: !!forceOverride,
+    });
   })
 );
 
 // POST /bookings/:id/cancel — отмена записи.
+// Строка НЕ удаляется: остаётся в базе со статусом canceled, поэтому клиент
+// видит визит как отменённый, а не потерянный. Время освобождается само —
+// getBusyIntervals() смотрит только на status != 'canceled'.
+//
+// body: { reason? } — причина; для отмены администратором она обязательна,
+// чтобы по истории было видно, почему чужой визит снят.
 router.post(
   '/:id/cancel',
   authRequired,
@@ -353,7 +474,23 @@ router.post(
         error: { message: 'Отменить можно только активную запись.', code: 'BOOKING_NOT_CANCELABLE' },
       });
     }
-    q.setBookingStatus(bookingId, 'canceled');
+
+    const byStaff = hasRole(req.user, 'owner') || hasRole(req.user, 'master');
+    let reason = req.body.reason === undefined ? null : v.str(req.body.reason, 'reason', { min: 3, max: 300 });
+    if (byStaff && !reason) {
+      return res.status(400).json({
+        error: { message: 'Укажите причину отмены — она видна в истории записи.', code: 'REASON_REQUIRED' },
+      });
+    }
+    if (reason === null && !byStaff) {
+      reason = 'Отменена клиентом';
+    }
+
+    // Кто отменил: у клиента это он сам, сотруднику пишем его user_id.
+    q.setBookingStatus(bookingId, 'canceled', {
+      canceledBy: byStaff ? req.user.id : null,
+      canceledReason: reason,
+    });
     return res.json({ booking: q.serializedBooking(bookingId) });
   })
 );

@@ -30,18 +30,22 @@ function isBookingTimeConflict(err) {
 // code различают точки отказа: SLOT_BUSY — заняла запись, SLOT_CONFLICT — слот
 // перехватили на удержании. Ближайшие окна клиенту нужны в обоих случаях,
 // поэтому список отдаём всегда.
-function sendSlotConflict(res, masterId, totalMinutes, code = 'SLOT_BUSY') {
+// Ответ на занятое время. code по умолчанию SLOT_BUSY.
+// extra — добавки к телу ошибки для владельца: can_force говорит, что записать
+// поверх занятого можно, но сначала нужно подтверждение (can_force само по себе
+// не создаёт запись — создаёт второй запрос с confirm=1).
+function sendSlotConflict(res, masterId, totalMinutes, code = 'SLOT_BUSY', extra = null) {
   const alternatives = nearestFreeSlots({ masterId, totalMinutes }).map((s) => ({
     starts_at: s.starts_at,
     ends_at: s.ends_at,
   }));
-  return res.status(409).json({
-    error: {
-      message: 'Это время уже занято. Выберите одно из ближайших свободных:',
-      code: code,
-      nearest_free: alternatives,
-    },
-  });
+  const error = {
+    message: 'Это время уже занято. Возьмите один из свободных вариантов:',
+    code: code,
+    nearest_free: alternatives,
+  };
+  if (extra && typeof extra === 'object') Object.assign(error, extra);
+  return res.status(409).json({ error });
 }
 
 module.exports = { asyncH, sendError, sendCreated, sendNoContent, isBookingTimeConflict, sendSlotConflict };

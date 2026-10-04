@@ -63,6 +63,42 @@
       });
     },
 
+    // Уведомления кабинета. Список и счётчик непрочитанных приезжают ОДНИМ
+    // ответом — отдельного запроса ради одного числа нет. Ответ кэшируется на
+    // странице: и шапка, и экран уведомлений берут одни и те же данные, поэтому
+    // два GET на один экран не уходят.
+    notifications: function () {
+      if (window.__notifPromise) return window.__notifPromise;
+      window.__notifPromise = fetch('/api/notifications')
+        .then(function (res) { return res.ok ? res.json() : { notifications: [], unread: 0 }; })
+        .then(function (data) {
+          window.__notif = data || { notifications: [], unread: 0 };
+          return window.__notif;
+        })
+        .catch(function () { return { notifications: [], unread: 0 }; });
+      return window.__notifPromise;
+    },
+
+    // Отметка «прочитано». После неё счётчик уменьшается, поэтому кэш
+    // сбрасываем — иначе шапка продолжит показывать старое число.
+    readNotification: function (id) {
+      return fetch('/api/notifications/' + encodeURIComponent(id) + '/read', { method: 'POST' })
+        .then(function (res) {
+          if (!res.ok) throw new Error('Не удалось отметить как прочитанное.');
+          return res.json();
+        })
+        .then(function (data) {
+          window.__notifPromise = null;
+          if (window.__notif) window.__notif.unread = data.unread;
+          return data;
+        });
+    },
+
+    // Сброс кэша: после любого действия, которое могло добавить уведомление.
+    invalidateNotifications: function () {
+      window.__notifPromise = null;
+    },
+
     // Копейки -> «1 200 ₽»
     rub: function (kop) {
       var rub = Number(kop || 0) / 100;

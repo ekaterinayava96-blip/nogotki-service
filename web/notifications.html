@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Уведомления — Ноготочки</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/tokens.css" />
+  <link rel="stylesheet" href="/css/app.css" />
+</head>
+<body>
+
+  <div id="global-header"></div>
+
+  <main class="container">
+    <h1 class="adm__title">Уведомления</h1>
+    <p class="adm__lead">Что произошло с вашими записями помимо вашей воли: отмена,
+      перенос и вторые записи на то же время.</p>
+
+    <div id="error" class="alert alert--error" hidden></div>
+
+    <div class="panel">
+      <div id="notifList"></div>
+    </div>
+
+    <p class="form-alt"><a href="appointments.html">К моим записям</a></p>
+  </main>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/header.js"></script>
+  <script>
+    (function () {
+      var listHost = document.getElementById('notifList');
+
+      // Заголовок типа: по нему видно, что именно случилось. Текст уведомления
+      // сам объясняет детали (даты и время), поэтому тут только вид события.
+      var TITLES = {
+        booking_canceled: 'Отмена записи',
+        booking_moved: 'Перенос записи',
+        booking_conflict: 'Второй визит на это время'
+      };
+
+      function render(data) {
+        var list = data.notifications || [];
+        if (!list.length) {
+          listHost.innerHTML =
+            '<div class="empty-state">' +
+              '<p>Уведомлений нет. Здесь появятся сообщения, если запись с вашей стороны отменят, ' +
+              'перенесут или посадят на ваше время ещё одного клиента.</p>' +
+            '</div>';
+          return;
+        }
+        var unread = Number(data.unread || 0);
+        listHost.innerHTML =
+          (unread ? '<p class="adm-sub">Непрочитанных: ' + unread + '</p>' : '') +
+          list.map(function (n) {
+            var inner =
+              '<span class="notif__top">' +
+                '<span class="notif__type">' + window.api.esc(TITLES[n.type] || n.type) + '</span>' +
+                '<span class="notif__ago">' + window.api.esc(n.ago || '') + '</span>' +
+              '</span>' +
+              '<p class="notif__text">' + window.api.esc(n.text) + '</p>' +
+              (n.url ? '<span class="notif__go"><span class="linklike">Перейти к записи →</span></span>' : '');
+            // Непрочитанное отмечаем при клике и ведём на детальную страницу
+            // записи — ссылка приходит с сервера вместе с текстом.
+            return '<a class="notif' + (n.is_read ? '' : ' notif--unread') + '" href="' +
+              window.api.esc(n.url || '#') + '" data-id="' + n.id + '" data-read="' +
+              (n.is_read ? '0' : '1') + '">' + inner + '</a>';
+          }).join('');
+      }
+
+      // Отметка «прочитано» уходит на сервер до перехода, но переход не ждёт её:
+      // отметка не должна задерживать открытие записи.
+      listHost.addEventListener('click', function (ev) {
+        var a = ev.target.closest('a.notif');
+        if (!a || a.getAttribute('data-read') !== '1') return;
+        ev.preventDefault();
+        var href = a.getAttribute('href');
+        window.api.readNotification(a.getAttribute('data-id')).then(function () {
+          a.classList.remove('notif--unread');
+          a.setAttribute('data-read', '0');
+          // Колокольчик в шапке показывает тот же счётчик — обновляем и его.
+          window.api.invalidateNotifications();
+          var bell = document.getElementById('notifCount');
+          if (bell) {
+            var n = Number(window.__notif && window.__notif.unread || 0);
+            if (n > 0) { bell.textContent = n > 99 ? '99+' : String(n); bell.hidden = false; }
+            else { bell.hidden = true; bell.textContent = ''; }
+          }
+          if (href && href !== '#') window.location.href = href;
+        }).catch(function () {
+          window.location.href = href;
+        });
+      });
+
+      // Тот же ответ отдаёт и список, и счётчик — второй запрос не делаем.
+      window.api.notifications().then(render).catch(function () {
+        window.ui.error('Не удалось загрузить уведомления.');
+      });
+    })();
+  </script>
+</body>
+</html>

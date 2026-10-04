@@ -8,6 +8,7 @@ const db = require('../db/connection');
 const q = require('../repo/queries');
 const { parseUtcIso, toDbLocal, nowDbLocal, assertNotPast } = require('../lib/time');
 const v = require('../lib/validate');
+const notifications = require('../lib/notifications');
 const { asyncH, isBookingTimeConflict, sendSlotConflict } = require('../lib/http');
 const { requireRole } = require('../middleware/auth');
 
@@ -36,15 +37,19 @@ router.get(
     // total считаем по тем же фильтрам, но без limit/offset — по нему экран
     // понимает, сколько страниц осталось и на какой он сейчас.
     const total = q.countBookings(filter);
-    const bookings = q.listBookings(limit === null
-      ? filter
-      : { ...filter, limit, offset });
+    const bookings = limit === null
+      ? q.adminBookings(filter)
+      : q.adminBookings({ ...filter, limit, offset });
     return res.json({ bookings, total, limit: limit === null ? total : limit, offset });
   })
 );
 
 // PATCH /admin/bookings/:id — смена статуса записи администратором.
-// body: { status: 'wait'|'confirmed'|'done'|'canceled' }
+// body: { status: 'wait'|'confirmed'|'done'|'canceled', reason? }
+//
+// При статусе canceled строка НЕ удаляется: остаётся в списке с пометкой
+// «Отменена», а время освобождается (getBusyIntervals смотрит только на
+// status != 'canceled'). Кто отменил и почему — пишется рядом.
 router.patch(
   '/bookings/:id',
   asyncH(async (req, res) => {
@@ -52,8 +57,31 @@ router.patch(
     const status = v.enumValue(req.body.status, 'status', ['wait', 'confirmed', 'done', 'canceled']);
     const row = q.bookingDetail(bookingId);
     if (!row) return res.status(404).json({ error: { message: 'Запись не найдена.', code: 'NOT_FOUND' } });
+
+    let reason = null;
+    if (status === 'canceled') {
+      reason = req.body.reason === undefined
+        ? null
+        : v.str(req.body.reason, 'reason', { min: 3, max: 300 });
+      if (!reason) {
+        return res.status(400).json({
+          error: {
+            message: 'Укажите причину отмены — она остаётся в истории записи и видна сотрудникам.',
+            code: 'REASON_REQUIRED',
+          },
+        });
+      }
+    }
+
     try {
-      q.setBookingStatus(bookingId, status);
+      q.setBookingStatus(bookingId, status, {
+        canceledBy: status === 'canceled' ? req.user.id : null,
+        canceledReason: reason,
+      });
+      // Случай 1: администратор отменил запись клиента. Клиент об этом ещё не
+      // знает — уведомляем. Отмена САМИМ клиентом сюда не попадает: этот
+      // эндпоинт закрыт requireRole('owner').
+      if (status === 'canceled') notifications.notifyBookingCanceled(bookingId);
     } catch (err) {
       // Триггер trg_bookings_no_overlap_update: смена статуса на активный
       // на пересечении с другой активной записью мастера запрещена.
@@ -68,7 +96,57 @@ router.patch(
       }
       throw err;
     }
-    return res.json({ booking: q.serializedBooking(bookingId) });
+    return res.json({ booking: q.adminBooking(bookingId) });
+  })
+);
+
+// GET /admin/bookings/day?date=YYYY-MM-DD&master_id=
+// Список записей выбранного дня: время, клиент, мастер, услуги, состояние.
+//
+// День приходит как «YYYY-MM-DD» в часовом поясе салона. Границы в UTC ISO:
+// from = начало дня салона, to = начало СЛЕДУЮЩЕГО дня — в API слоты и записи
+// сравниваются как starts_at >= from AND starts_at < to, иначе визит в 23:30
+// попал бы в завтрашний день или потерялся бы.
+//
+// Время в ответе остаётся салонным (dbLocal) — экран рисует его через
+// window.api.hour(), как все остальные страницы. Отдельного эндпоинта «на день»
+// раньше не было: панель брала общий список и фильтровала по from/to, из-за чего
+// в счётчике и в строках разъезжались границы.
+router.get(
+  '/bookings/day',
+  asyncH(async (req, res) => {
+    const date = v.str(req.query.date, 'date', { min: 10, max: 10 });
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({
+        error: { message: 'Дата должна быть в формате YYYY-MM-DD.', code: 'BAD_DATE' },
+      });
+    }
+    const masterId = req.query.master_id === undefined ? null : v.intId(req.query.master_id, 'master_id');
+    // Полночь салона (UTC+3) на выбранный день и на следующий.
+    const fromIso = `${date}T00:00:00.000Z`;
+    const nextDay = new Date(Date.UTC(
+      Number(date.slice(0, 4)), Number(date.slice(5, 7)) - 1, Number(date.slice(8, 10)) + 1
+    ));
+    const nextIso = `${nextDay.toISOString().slice(0, 10)}T00:00:00.000Z`;
+
+    const fromLocal = toDbLocal(parseUtcIso(fromIso));
+    const toLocal = toDbLocal(parseUtcIso(nextIso));
+    const bookings = q.adminBookings({ masterId, fromLocal, toLocal });
+    const total = q.countBookings({ masterId, fromLocal, toLocal });
+    return res.json({ date, timezone_offset_minutes: 180, bookings, total });
+  })
+);
+
+// GET /admin/bookings/:id/moves — журнал переносов записи: откуда ушли, куда
+// пришли, кто переносил. Сама перенесённая запись одна и та же (id не меняется),
+// поэтому вторая «новая» запись не создаётся и клиент не получает второе
+// уведомление — но след переноса остаётся.
+router.get(
+  '/bookings/:id/moves',
+  asyncH(async (req, res) => {
+    const bookingId = v.intId(req.params.id, 'id');
+    if (!q.bookingDetail(bookingId)) return res.status(404).json({ error: { message: 'Запись не найдена.', code: 'NOT_FOUND' } });
+    return res.json({ booking_id: bookingId, moves: q.bookingMoves(bookingId) });
   })
 );
 

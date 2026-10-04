@@ -37,12 +37,20 @@
     if (user) {
       var name = user.client_name || user.username || '?';
       var initial = window.api.esc(String(name).trim().charAt(0).toUpperCase());
+      // Колокольчик с числом непрочитанных. Число НЕ зашито в разметку:
+      // приходит тем же ответом, что и список уведомлений (api.notifications()).
       auth =
         '<div class="nav__auth">' +
+          '<a class="nav__bell" href="notifications.html" aria-label="Уведомления">' +
+            '<span class="nav__bell-icon" aria-hidden="true">🔔</span>' +
+            '<span class="nav__bell-count" id="notifCount" hidden></span>' +
+          '</a>' +
           '<span class="nav__avatar" title="' + window.api.esc(name) + '">' + initial + '</span>' +
           '<span class="nav__user">' + window.api.esc(name) + '</span>' +
           '<button type="button" class="btn btn--secondary btn--sm" data-logout>Выйти</button>' +
         '</div>';
+      // Счётчик подставляем после вставки шапки: на самой странице ещё нет DOM.
+      setTimeout(function () { fillUnread(); }, 0);
     } else {
       auth =
         '<div class="nav__auth">' +
@@ -95,6 +103,23 @@
 
     var out = host.querySelector('[data-logout]');
     if (out) out.addEventListener('click', function () { window.api.logout(); });
+  }
+
+  // Счётчик непрочитанных подставляется из ответа /api/notifications.
+  // Отдельного запроса ради числа нет — тот же ответ отдаёт и список.
+  function fillUnread() {
+    var el = document.getElementById('notifCount');
+    if (!el) return;
+    window.api.notifications().then(function (data) {
+      var n = Number((data && data.unread) || 0);
+      if (n > 0) {
+        el.textContent = n > 99 ? '99+' : String(n);
+        el.hidden = false;
+      } else {
+        el.hidden = true;
+        el.textContent = '';
+      }
+    });
   }
 
   window.api.me().then(render).catch(function () { render(null); });

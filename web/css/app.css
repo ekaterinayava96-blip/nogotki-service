@@ -771,6 +771,48 @@ body.is-modal-open { overflow: hidden; }
 .adm-fb__text { color: var(--color-text-primary); font-size: var(--font-size-sm); line-height: 1.55; white-space: pre-wrap; margin-bottom: var(--space-3); }
 .adm-fb__actions { display: flex; gap: var(--space-2); }
 
+/* ---------- Уведомления: колокольчик и список ---------- */
+
+.nav__bell {
+  position: relative;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: var(--space-7); height: var(--space-7);
+  border-radius: var(--radius-full);
+  text-decoration: none;
+}
+.nav__bell:hover { background: var(--color-button-secondary-hover); }
+.nav__bell-icon { font-size: var(--font-size-body); line-height: 1; }
+.nav__bell-count {
+  position: absolute; top: 0; right: 0;
+  min-width: 18px; height: 18px; padding: 0 var(--space-1);
+  border-radius: var(--radius-full);
+  background: var(--color-button-primary);
+  color: var(--color-button-primary-text);
+  font-size: var(--font-size-caption); font-weight: 800;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+
+.notif {
+  display: block; width: 100%; text-align: left;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+  color: inherit; font: inherit;
+  text-decoration: none;
+  margin-bottom: var(--space-3);
+}
+.notif:hover { border-color: var(--color-button-primary); }
+.notif--unread { background: var(--color-bg-subtle); border-color: var(--color-border-strong); }
+.notif__top {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-3); margin-bottom: var(--space-2);
+}
+.notif__type { font-weight: 800; font-size: var(--font-size-sm); color: var(--color-text-heading); }
+.notif__ago { font-size: var(--font-size-caption); color: var(--color-text-muted); white-space: nowrap; }
+.notif__text { margin: 0; color: var(--color-text-primary); }
+.notif__go { margin-top: var(--space-2); font-size: var(--font-size-sm); }
+
 /* ---------- Раздел администратора: шапка и меню (/admin) ----------
    Каркас страниц раздела (web/admin/*.html, web/js/admin-shell.js).
    Все значения — из tokens.css, новых цветов и размеров здесь нет. */
@@ -810,6 +852,63 @@ body.is-modal-open { overflow: hidden; }
   border-color: var(--color-button-primary);
   color: var(--color-button-primary-text);
 }
+
+/* ---------- Записи: переключение дат и фильтр по мастеру ---------- */
+
+.adm-daybar {
+  display: flex; align-items: flex-end; gap: var(--space-3);
+  flex-wrap: wrap; margin-bottom: var(--space-4);
+}
+.adm-daybar .field { margin-bottom: 0; }
+.adm-daybar__master { min-width: 200px; }
+
+/* ---------- Записи: колонки и перенос содержимого ----------
+   Общая .adm-table распределяет ширину по содержимому каждой строки, поэтому
+   длинная причина отмены или перечень услуг растягивали колонки по-разному и
+   столбцы «прыгали» от строки к строке. Здесь ширины заданы явно, а таблица
+   получила минимальную ширину: на узком экране она прокручивается внутри
+   .adm-table-wrap, а не выталкивает всю страницу. */
+
+.adm-table--bookings { table-layout: fixed; min-width: 1050px; }
+.adm-table--bookings th,
+.adm-table--bookings td { overflow-wrap: break-word; }
+/* Ширины заданы всем шести колонкам. Если хотя бы одну оставить «auto», то при
+   table-layout: fixed на узком экране ей доставался ноль — колонка схлопывалась
+   и её содержимое наезжало на соседнюю. */
+.adm-table--bookings th:nth-child(1),
+.adm-table--bookings td:nth-child(1) { width: 170px; }
+.adm-table--bookings th:nth-child(2),
+.adm-table--bookings td:nth-child(2) { width: 190px; }
+.adm-table--bookings th:nth-child(3),
+.adm-table--bookings td:nth-child(3) { width: 140px; }
+.adm-table--bookings th:nth-child(4),
+.adm-table--bookings td:nth-child(4) { width: 240px; }
+.adm-table--bookings th:nth-child(5),
+.adm-table--bookings td:nth-child(5) { width: 140px; }
+.adm-table--bookings th:nth-child(6),
+.adm-table--bookings td:nth-child(6) { width: 170px; }
+
+/* Время не переносим — «10:00–11:30» разрывать нельзя, — но пометки под ним
+   переносить можно: nowrap на всей ячейке выносил длинную причину отмены за
+   границу. */
+.adm-table--bookings .adm-when { white-space: normal; }
+.adm-table--bookings .adm-when > b { white-space: nowrap; display: block; }
+
+/* Пометки под временем: каждая — отдельной строкой, без <br> после блочного
+   элемента (он давал пустую строку и растягивал ячейку). */
+.adm-marks { display: block; margin-top: var(--space-2); }
+.adm-marks > * { display: block; margin-bottom: var(--space-1); }
+.adm-marks > *:last-child { margin-bottom: 0; }
+.adm-marks .adm-sub { display: block; }
+
+/* Бейджи в этой таблице переносятся. «Два визита на это время» длиннее любой
+   колонки, а nowrap у .badge выносил его за край ячейки. */
+.adm-table--bookings .badge { white-space: normal; }
+
+/* Действия переносятся, а не стоят в одну непомещающуюся строку. */
+.adm-table--bookings .adm-actions { white-space: normal; }
+.adm-actions__row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.adm-actions__row .btn { margin-right: 0; }
 
 /* ---------- АДАПТИВ: УЗКИЙ ЭКРАН (ТЕЛЕФОН) ----------
    Правило: в этом блоке только то, что на телефоне не помещается, не
@@ -969,4 +1068,23 @@ body.is-modal-open { overflow: hidden; }
 .adm-pager__nav { justify-content: space-between; }
 .adm-top__inner { flex-direction: column; align-items: flex-start; }
 .adm-top__right { flex-wrap: wrap; }
+/* Записи на телефоне: таблица прокручивается внутри обёртки, поэтому колонки
+   просто сжимаем по ширине — высота строк растёт, но страница не уезжает. */
+.adm-table--bookings { min-width: 820px; }
+.adm-table--bookings th,
+.adm-table--bookings td { padding: var(--space-2); }
+.adm-table--bookings th:nth-child(1),
+.adm-table--bookings td:nth-child(1) { width: 120px; }
+.adm-table--bookings th:nth-child(2),
+.adm-table--bookings td:nth-child(2) { width: 140px; }
+.adm-table--bookings th:nth-child(3),
+.adm-table--bookings td:nth-child(3) { width: 110px; }
+.adm-table--bookings th:nth-child(4),
+.adm-table--bookings td:nth-child(4) { width: 170px; }
+.adm-table--bookings th:nth-child(5),
+.adm-table--bookings td:nth-child(5) { width: 130px; }
+.adm-table--bookings th:nth-child(6),
+.adm-table--bookings td:nth-child(6) { width: 150px; }
+.adm-daybar { align-items: stretch; }
+.adm-daybar__master { min-width: 0; flex: 1 1 100%; }
 }

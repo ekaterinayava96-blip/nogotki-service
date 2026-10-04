@@ -12,6 +12,7 @@ const holdsRoutes = require('./routes/holds');
 const bookingRoutes = require('./routes/bookings');
 const feedbackRoutes = require('./routes/feedback');
 const adminRoutes = require('./routes/admin');
+const notificationRoutes = require('./routes/notifications');
 const adminPageRoutes = require('./routes/admin-pages');
 
 const app = express();
@@ -39,6 +40,8 @@ app.use('/api', catalogRoutes);
 app.use('/api', holdsRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/feedback', feedbackRoutes);
+// Уведомления кабинета: доступны любому вошедшему, но отдают только его own.
+app.use('/api/notifications', notificationRoutes);
 app.use('/api/admin', adminRoutes);
 
 // Страницы раздела администратора (/admin, /admin/*). Монтируются ДО статики

@@ -16,16 +16,42 @@
 
   <main class="container">
     <h1 class="adm__title">Записи</h1>
-    <p class="adm__lead">Все записи студии: клиент, услуги, мастер, время и статус.</p>
+    <p class="adm__lead">Записи выбранного дня по всей студии. Время показано в
+      часовом поясе салона (UTC+3), не так, как оно лежит в базе.</p>
 
     <div id="admin-menu"></div>
 
-    <div class="empty-state">
-      <p>Записей пока не показано. Данные пока не подключены.</p>
+    <div id="error" class="alert alert--error" hidden></div>
+    <div id="bkNote" class="alert" hidden></div>
+
+    <div class="panel">
+      <div class="adm-daybar">
+        <button type="button" class="btn btn--ghost btn--sm" id="bkPrev" title="Предыдущий день">←</button>
+        <div class="field">
+          <label for="bkDate">День</label>
+          <input type="date" id="bkDate">
+        </div>
+        <button type="button" class="btn btn--ghost btn--sm" id="bkNext" title="Следующий день">→</button>
+        <div class="field adm-daybar__master">
+          <label for="bkMaster">Мастер</label>
+          <select id="bkMaster"></select>
+        </div>
+        <button type="button" class="btn btn--secondary btn--sm" id="bkToday">Сегодня</button>
+        <button type="button" class="btn btn--secondary btn--sm" id="bkRefresh">Обновить</button>
+      </div>
+      <p class="adm-sub"><span id="bkSummary"></span> <span id="bkStamp"></span></p>
     </div>
+
+    <div class="panel">
+      <h3>Записи дня</h3>
+      <div id="bkList"></div>
+    </div>
+
+    <div class="panel" id="bkMoveBox" hidden></div>
   </main>
 
   <script src="/js/api.js"></script>
   <script src="/js/admin-shell.js"></script>
+  <script src="/js/admin-bookings.js"></script>
 </body>
 </html>

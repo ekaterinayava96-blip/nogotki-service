@@ -560,16 +560,16 @@ function bookingServicesOf(row, services) {
 // serviceIds — услуги записи (одна или несколько); serviceId оставлен для
 // обратной совместимости вызовов сида. bookings.service_id = первая услуга,
 // полный список — в booking_services (со снимком цены и длительности).
-function createBooking({ clientId, serviceId, serviceIds, masterId, startsAtLocal, endsAtLocal, comment, source, forceOverride = 0, status = 'wait' }) {
+function createBooking({ clientId, serviceId, serviceIds, masterId, startsAtLocal, endsAtLocal, comment, source, forceOverride = 0, status = 'wait', conflictNote = null }) {
   const ids = (serviceIds && serviceIds.length ? serviceIds : [serviceId]).map(Number);
   if (!ids.length || ids.some((id) => !Number.isInteger(id) || id <= 0)) {
-    throw new Error('createBooking: нужен непустой список услуг.');
+    throw new Error('createBooking: переданы некорректные услуги.');
   }
   const info = db
     .prepare(`
-      INSERT INTO bookings (client_id, service_id, master_id, starts_at, ends_at, status, comment, source, force_override, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .run(Number(clientId), ids[0], Number(masterId), startsAtLocal, endsAtLocal, status, comment, source, forceOverride ? 1 : 0, nowDbLocal());
+      INSERT INTO bookings (client_id, service_id, master_id, starts_at, ends_at, status, comment, source, force_override, conflict_note, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(Number(clientId), ids[0], Number(masterId), startsAtLocal, endsAtLocal, status, comment, source, forceOverride ? 1 : 0, conflictNote, nowDbLocal());
   const bookingId = Number(info.lastInsertRowid);
   // Снимок цены и длительности берём из каталога на момент записи.
   // Плейсхолдеры: booking_id, position, service_id.
@@ -584,16 +584,89 @@ function bookingById(id) {
   return db.prepare('SELECT * FROM bookings WHERE id = ?').get(Number(id));
 }
 
-function setBookingStatus(id, status) {
+// Смена статуса. Если статус становится 'canceled', запись остаётся строкой
+// (ничего не удаляется) и рядом пишется, кто отменил и почему. Время при этом
+// освобождается само: getBusyIntervals() берёт записи по status != 'canceled',
+// поэтому отменённая строка перестаёт занимать слот.
+function setBookingStatus(id, status, { canceledBy = null, canceledReason = null } = {}) {
+  if (status === 'canceled') {
+    db.prepare(
+      'UPDATE bookings SET status = ?, updated_at = ?, canceled_by = ?, canceled_reason = ?, canceled_at = ? WHERE id = ?'
+    ).run(status, nowDbLocal(), canceledBy, canceledReason, nowDbLocal(), Number(id));
+    return;
+  }
+  // Возврат из отмены в активный статус затирает след отмены: иначе панель
+  // показывала бы «отменял X» у действующей записи.
   db.prepare(
-    'UPDATE bookings SET status = ?, updated_at = ? WHERE id = ?'
+    `UPDATE bookings SET status = ?, updated_at = ?,
+       canceled_by = NULL, canceled_reason = NULL, canceled_at = NULL
+     WHERE id = ?`
   ).run(status, nowDbLocal(), Number(id));
 }
 
-function moveBooking(id, startsAtLocal, endsAtLocal, masterId = null) {
+// Журнал переносов: откуда ушли, куда пришли, кто переносил. Перенос меняет
+// время той же записи, поэтому каждый перенос — одна строка здесь, а не новая
+// запись в bookings. Клиент уведомлений на два раза не получает именно потому,
+// что второй записи не появляется.
+function addBookingMove({ bookingId, fromAtLocal, toAtLocal, fromMaster = null, toMaster = null, movedBy = null }) {
+  const info = db.prepare(
+    `INSERT INTO booking_moves (booking_id, from_at, to_at, from_master, to_master, moved_by, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    Number(bookingId), fromAtLocal, toAtLocal,
+    fromMaster ? Number(fromMaster) : null,
+    toMaster ? Number(toMaster) : null,
+    movedBy ? Number(movedBy) : null,
+    nowDbLocal()
+  );
+  return Number(info.lastInsertRowid);
+}
+
+function bookingMoves(bookingId) {
+  return db
+    .prepare(`
+      SELECT bm.id, bm.from_at, bm.to_at, bm.created_at, bm.moved_by,
+             bm.from_master, mf.name AS from_master_name,
+             bm.to_master, mt.name AS to_master_name,
+             u.username AS moved_by_username
+      FROM booking_moves bm
+      LEFT JOIN masters mf ON mf.id = bm.from_master
+      LEFT JOIN masters mt ON mt.id = bm.to_master
+      LEFT JOIN users u ON u.id = bm.moved_by
+      WHERE bm.booking_id = ?
+      ORDER BY bm.created_at, bm.id`)
+    .all(Number(bookingId));
+}
+
+function lastBookingMove(bookingId) {
+  return bookingMoves(bookingId).slice(-1)[0] || null;
+}
+
+function moveBooking(id, startsAtLocal, endsAtLocal, masterId = null, { forceOverride = 0, conflictNote = null } = {}) {
   db.prepare(
-    'UPDATE bookings SET starts_at = ?, ends_at = ?, master_id = COALESCE(?, master_id), updated_at = ? WHERE id = ?'
-  ).run(startsAtLocal, endsAtLocal, masterId ? Number(masterId) : null, nowDbLocal(), Number(id));
+    `UPDATE bookings
+     SET starts_at = ?, ends_at = ?, master_id = COALESCE(?, master_id),
+         force_override = ?, conflict_note = ?, updated_at = ?
+     WHERE id = ?`
+  ).run(
+    startsAtLocal, endsAtLocal, masterId ? Number(masterId) : null,
+    forceOverride ? 1 : 0, conflictNote, nowDbLocal(), Number(id)
+  );
+}
+
+// Кто занимает это время по-настоящему — интервалы пересекаются, а не «начало
+// попало в диапазон». Нужен, чтобы найти пострадавшего при наложении: запись,
+// начавшаяся ДО новой и закончившаяся внутри неё, по фильтру «начало в
+// диапазоне» не находилась бы вовсе.
+function overlappingBookings(masterId, startsAtLocal, endsAtLocal, excludeId = null) {
+  return db
+    .prepare(`
+      SELECT id FROM bookings
+      WHERE master_id = ? AND status != 'canceled'
+        AND starts_at < ? AND ends_at > ?
+        ${excludeId ? 'AND id != ?' : ''}
+      ORDER BY id`)
+    .all(Number(masterId), endsAtLocal, startsAtLocal, ...(excludeId ? [Number(excludeId)] : []));
 }
 
 // Деталь для отдачи наружу: без паролей, суммы в копейках, время в UTC.
@@ -601,6 +674,7 @@ function bookingDetail(id) {
   const row = db
     .prepare(`
       SELECT b.id, b.starts_at, b.ends_at, b.status, b.comment, b.source, b.force_override, b.created_at, b.updated_at,
+             b.canceled_by, b.canceled_reason, b.canceled_at, b.conflict_note,
              c.id AS client_id, c.name AS client_name, c.phone AS client_phone,
              s.id AS service_id, s.name AS service_name, s.price_kopecks AS service_price, s.duration_minutes AS service_duration,
              m.id AS master_id, m.name AS master_name, m.role AS master_role
@@ -641,6 +715,15 @@ function serializeBooking(row, services = null) {
       name: row.master_name,
       role: row.master_role,
     },
+    // Отмена: кто и почему. Клиент в кабинете видит, что визит отменён и по
+    // какой причине — иначе запись просто исчезла бы из его списка.
+    cancellation: row.canceled_at ? {
+      canceled_at: dbLocalToUtcIso(row.canceled_at),
+      reason: row.canceled_reason || null,
+      by: row.canceled_by ? { user_id: row.canceled_by, is_staff: true } : { user_id: null, is_staff: false },
+    } : null,
+    // Пометка администратора: запись создана поверх занятого времени.
+    conflict_note: row.conflict_note || null,
   };
 }
 
@@ -678,6 +761,7 @@ function listBookings({ clientId = null, masterId = null, status = null, fromLoc
   const rows = db
     .prepare(`
       SELECT b.id, b.starts_at, b.ends_at, b.status, b.comment, b.source, b.force_override, b.created_at, b.updated_at,
+             b.canceled_by, b.canceled_reason, b.canceled_at, b.conflict_note,
              c.id AS client_id, c.name AS client_name, c.phone AS client_phone,
              s.id AS service_id, s.name AS service_name, s.price_kopecks AS service_price, s.duration_minutes AS service_duration,
              m.id AS master_id, m.name AS master_name, m.role AS master_role
@@ -705,6 +789,102 @@ function countBookingsWithService(serviceId) {
   const direct = db.prepare('SELECT COUNT(*) AS n FROM bookings WHERE service_id = ?').get(Number(serviceId));
   const inSet = db.prepare('SELECT COUNT(*) AS n FROM booking_services WHERE service_id = ?').get(Number(serviceId));
   return Number(direct.n) + Number(inSet.n);
+}
+
+// Запись для панели владельца: всё то же плюс след отмены и перенос.
+// Отдельная функция, а не serializeBooking: панели нужны имена «кто отменил»
+// и «кто переносил», а клиенту такие подробности не показывают.
+// Список записей дня для панели. Время отдаётся как есть (dbLocal, салонное),
+// а экран переводит в HH:MM через window.api.hour() — так же, как клиентские
+// страницы. Дополнительно каждая строка получает moved_last и overlap:
+// «перенесён» и «на это время два визита».
+function adminBookings({ masterId = null, status = null, fromLocal = null, toLocal = null, limit = null, offset = 0 }) {
+  const { where, params } = bookingFilterConds({ masterId, status, fromLocal, toLocal });
+  const rows = db
+    .prepare(`
+      SELECT b.id, b.starts_at, b.ends_at, b.status, b.comment, b.source, b.force_override, b.created_at, b.updated_at,
+             b.canceled_by, b.canceled_reason, b.canceled_at, b.conflict_note,
+             c.id AS client_id, c.name AS client_name, c.phone AS client_phone,
+             s.id AS service_id, s.name AS service_name, s.price_kopecks AS service_price, s.duration_minutes AS service_duration,
+             m.id AS master_id, m.name AS master_name, m.role AS master_role
+      FROM bookings b
+      JOIN clients c ON c.id = b.client_id
+      JOIN services s ON s.id = b.service_id
+      JOIN masters m ON m.id = b.master_id
+      WHERE ${where}
+      ORDER BY b.starts_at
+      ${limit === null ? '' : 'LIMIT ? OFFSET ?'}`)
+    .all(...params, ...(limit === null ? [] : [Number(limit), Number(offset)]));
+  const services = bookingServicesMap(rows.map((r) => r.id));
+  return rows.map((row) => {
+    const base = serializeBooking(row, services.get(row.id));
+    const moves = bookingMoves(row.id);
+    const overlap = bookingHasOverlap(row.id);
+    const cancelUser = row.canceled_by
+      ? db.prepare('SELECT username FROM users WHERE id = ?').get(Number(row.canceled_by))
+      : null;
+    return {
+      ...base,
+      canceled_reason: row.canceled_reason || null,
+      canceled_at: row.canceled_at ? dbLocalToUtcIso(row.canceled_at) : null,
+      canceled_by_username: cancelUser ? cancelUser.username : null,
+      moved_last: moves.length ? moves[moves.length - 1] : null,
+      moves_count: moves.length,
+      // На это время назначено два визита: помечаем в списке дня.
+      overlap: !!overlap,
+      overlap_with: overlap ? overlap.booking_id : null,
+    };
+  });
+}
+
+function adminBooking(bookingId) {
+  const row = db
+    .prepare(`
+      SELECT b.id, b.starts_at, b.ends_at, b.status, b.comment, b.source, b.force_override, b.created_at, b.updated_at,
+             b.canceled_by, b.canceled_reason, b.canceled_at, b.conflict_note,
+             c.id AS client_id, c.name AS client_name, c.phone AS client_phone,
+             s.id AS service_id, s.name AS service_name, s.price_kopecks AS service_price, s.duration_minutes AS service_duration,
+             m.id AS master_id, m.name AS master_name, m.role AS master_role
+      FROM bookings b
+      JOIN clients c ON c.id = b.client_id
+      JOIN services s ON s.id = b.service_id
+      JOIN masters m ON m.id = b.master_id
+      WHERE b.id = ?`)
+    .get(Number(bookingId));
+  if (!row) return null;
+  const base = serializeBooking(row, servicesOfBooking(bookingId));
+  const cancelUser = row.canceled_by
+    ? db.prepare('SELECT username FROM users WHERE id = ?').get(Number(row.canceled_by))
+    : null;
+  const moves = bookingMoves(bookingId);
+  return {
+    ...base,
+    canceled_by: row.canceled_by,
+    // Причина и время отмены — подняты на верхний уровень, иначе панели
+    // пришлось бы лезть в cancellation.reason за тем же самым.
+    canceled_reason: row.canceled_reason || null,
+    canceled_at: row.canceled_at ? dbLocalToUtcIso(row.canceled_at) : null,
+    canceled_by_username: cancelUser ? cancelUser.username : null,
+    moves,
+    moves_count: moves.length,
+    moved_last: moves.length ? moves[moves.length - 1] : null,
+    overlap: !!bookingHasOverlap(bookingId),
+  };
+}
+
+// Есть ли в это время ещё одна запись того же мастера. Панель помечает такие
+// строки: запись, созданная поверх занятого времени, видна как «двойная».
+function bookingHasOverlap(bookingId) {
+  const row = db.prepare('SELECT master_id, starts_at, ends_at FROM bookings WHERE id = ?').get(Number(bookingId));
+  if (!row) return null;
+  const other = db
+    .prepare(`
+      SELECT id FROM bookings
+      WHERE master_id = ? AND status != 'canceled' AND id != ?
+        AND starts_at < ? AND ends_at > ?
+      LIMIT 1`)
+    .get(Number(row.master_id), Number(bookingId), row.ends_at, row.starts_at);
+  return other ? { booking_id: other.id, starts_at: other.starts_at } : null;
 }
 
 function lastBookingConflictAt(masterId, excludeBookingId, startsLocal, endsLocal) {
@@ -770,6 +950,13 @@ module.exports = {
   bookingServicesMap,
   bookingById,
   setBookingStatus,
+  addBookingMove,
+  overlappingBookings,
+  adminBookings,
+  bookingMoves,
+  lastBookingMove,
+  adminBooking,
+  bookingHasOverlap,
   moveBooking,
   bookingDetail,
   serializedBooking,
