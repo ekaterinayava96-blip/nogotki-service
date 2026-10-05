@@ -31,6 +31,18 @@ function password(value) {
   return v;
 }
 
+// Почта приходит из внешнего сервиса, но проверять её всё равно нужно: по ней
+// ищется существующий аккаунт, и мусорный адрес не должен ни найти, ни тем
+// более создать новую запись. Приводим к нижнему регистру — иначе один и тот
+// же человек с 'Ivan@mail.ru' и 'ivan@mail.ru' получил бы два аккаунта.
+function email(value) {
+  const v = String(value == null ? '' : value).trim().toLowerCase();
+  if (!v) bad('Почта не пришла от внешнего сервиса.');
+  if (v.length > 254) bad('Почта: не длиннее 254 символов.');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) bad('Почта выглядит неправильно.');
+  return v;
+}
+
 function name(value) {
   const v = str(value, 'name', { min: 2, max: 100 });
   if (v[0] === '+') bad('Поле «name» не может начинаться с «+».');
@@ -105,6 +117,7 @@ module.exports = {
   str,
   username,
   password,
+  email,
   name,
   phone,
   intId,

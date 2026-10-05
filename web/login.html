@@ -36,6 +36,16 @@
         </div>
       </form>
 
+      <!--
+        Внешний вход. В прототипе этой кнопки нет: функция не входила в
+        первоначальный план. Оформлена существующими классами, отдельного
+        визуального стиля не вводили.
+      -->
+      <p class="auth-divider">или</p>
+      <button type="button" class="btn btn--secondary btn--md btn--block" id="yandexLogin">
+        Войти через Яндекс
+      </button>
+
       <p class="form-alt"><a href="forgot.html">Забыли пароль?</a></p>
       <p class="form-alt">Нет аккаунта? <a href="register.html">Зарегистрироваться</a></p>
     </div>
@@ -43,6 +53,7 @@
 
   <script src="js/api.js"></script>
   <script src="js/header.js"></script>
+  <script src="js/yandex-login.js"></script>
   <script>
     (function () {
       var form = document.getElementById('login-form');

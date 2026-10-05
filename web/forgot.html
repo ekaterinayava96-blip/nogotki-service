@@ -18,9 +18,23 @@
     <h1>Восстановление пароля</h1>
     <div class="panel">
       <p class="hint" style="margin-bottom:var(--space-5)">
-        Укажите логин — мы отправим ссылку для сброса пароля на вашу почту.
+        Укажите логин — мы проверим, как можно восстановить доступ к этому аккаунту.
       </p>
       <div id="error" class="alert alert--error" hidden></div>
+
+      <!--
+        Аккаунт, созданный через Яндекс, пароля не имеет. Сбрасывать нечего,
+        поэтому вместо письма сервер отвечает PASSWORDLESS_ACCOUNT, и здесь
+        показывается текст про Яндекс. В прототипе этого блока нет.
+      -->
+      <div id="yandex-note" class="alert alert--neutral" hidden>
+        <p style="margin:0 0 var(--space-3)">
+          Этот аккаунт входит через Яндекс — пароля у него нет. Восстанавливать нечего.
+        </p>
+        <button type="button" class="btn btn--secondary btn--sm" id="yandexLogin">
+          Войти через Яндекс
+        </button>
+      </div>
 
       <form id="forgot-form" novalidate>
         <div class="field">
@@ -41,11 +55,13 @@
 
   <script src="js/api.js"></script>
   <script src="js/header.js"></script>
+  <script src="js/yandex-login.js"></script>
   <script>
     (function () {
       var form = document.getElementById('forgot-form');
       var username = document.getElementById('forgot-username');
       var submit = form.querySelector('button[type="submit"]');
+      var yandexNote = document.getElementById('yandex-note');
 
       function fieldError(input, msg) {
         var box = input.closest('.field');
@@ -60,7 +76,10 @@
           el.hidden = true;
         }
       }
-      username.addEventListener('input', function () { fieldError(username, ''); });
+      username.addEventListener('input', function () {
+        fieldError(username, '');
+        yandexNote.hidden = true;
+      });
 
       form.addEventListener('submit', function (ev) {
         ev.preventDefault();
@@ -74,10 +93,26 @@
         }
 
         submit.disabled = true;
-        // Эндпоинт восстановления в API не реализован: сервер вернёт 404,
-        // и его ответ показываем текстом, как и любую другую ошибку.
+        // Письма сервис не отправляет: почтового провайдера в проекте нет.
+        // Сервер отвечает, что делать с этим аккаунтом: сброс пароля,
+        // вход через Яндекс или «восстановление не подключено».
         window.api.request('/api/auth/password/forgot', { method: 'POST', json: { username: value } })
-          .catch(function () { submit.disabled = false; });
+          .then(function (data) {
+            submit.disabled = false;
+            if (data && data.method === 'yandex') {
+              // Аккаунт без пароля: вместо письма — текст про Яндекс.
+              yandexNote.hidden = false;
+              return;
+            }
+            // Несуществующий аккаунт: сервер отвечает нейтрально, чтобы по
+            // ответу нельзя было перебирать логины.
+            if (data && data.sent) {
+              window.ui.error('Если такой логин есть, мы покажем, как восстановить к нему доступ.');
+            }
+          })
+          .catch(function () {
+            submit.disabled = false;
+          });
       });
     })();
   </script>

@@ -53,6 +53,35 @@ const trustProxy = TRUST_PROXY_RAW === '' || TRUST_PROXY_RAW === '0' || TRUST_PR
   ? false
   : (Number(TRUST_PROXY_RAW) >= 0 ? Number(TRUST_PROXY_RAW) : 1);
 
+// ---------- Внешний вход (Яндекс) ----------
+//
+// Сервис в Яндексе НЕ зарегистрирован: у него нет постоянного адреса, на
+// который Яндекс вернёт пользователя. Пока адреса нет, реальный обмен кодами
+// невозможен, поэтому внешний вход проверяется заглушкой.
+//
+// По умолчанию заглушка ВЫКЛЮЧЕНА. Пока сервис не опубликован, держать
+// заглушку включённой на сервере нельзя: она подставляет тестовую почту и
+// имя и пускает в аккаунт без проверки у Яндекса.
+const YANDEX_STUB = (process.env.YANDEX_STUB || '').trim().toLowerCase();
+const yandexStubEnabled = YANDEX_STUB === '1' || YANDEX_STUB === 'true' || YANDEX_STUB === 'yes';
+
+// Тестовые данные заглушки. Пока она включена — только для локальной проверки.
+const yandexStubEmail = (process.env.YANDEX_STUB_EMAIL || '').trim().toLowerCase();
+const yandexStubName = (process.env.YANDEX_STUB_NAME || '').trim();
+
+// Настоящее подключение: заполняется после публикации сервиса в Яндексе.
+const yandexClientId = (process.env.YANDEX_CLIENT_ID || '').trim();
+const yandexClientSecret = (process.env.YANDEX_CLIENT_SECRET || '').trim();
+const yandexRedirectUri = (process.env.YANDEX_REDIRECT_URI || '').trim();
+
+// Включённая заглушка без почты приведёт к вечной пустой ветке, поэтому
+// отказываем на старте, а не молча логиним в никуда.
+if (yandexStubEnabled && !yandexStubEmail) {
+  throw new Error(
+    '[config] YANDEX_STUB включён, но YANDEX_STUB_EMAIL пуст — укажите тестовую почту или выключите заглушку.'
+  );
+}
+
 module.exports = {
   port,
   dbPath: path.resolve(__dirname, '..', process.env.DB_PATH || 'data/nogotki.db'),
@@ -60,4 +89,10 @@ module.exports = {
   isProduction,
   trustProxy,
   authTtlSeconds: Number.isInteger(AUTH_TTL_SECONDS) && AUTH_TTL_SECONDS > 0 ? AUTH_TTL_SECONDS : 7 * 24 * 3600,
+  yandexStubEnabled,
+  yandexStubEmail,
+  yandexStubName,
+  yandexClientId,
+  yandexClientSecret,
+  yandexRedirectUri,
 };

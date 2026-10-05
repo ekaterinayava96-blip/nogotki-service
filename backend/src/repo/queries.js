@@ -29,6 +29,59 @@ function userById(id) {
   return db.prepare('SELECT * FROM users WHERE id = ?').get(Number(id));
 }
 
+// Внешний вход ищет человека по почте: она приходит из внешнего сервиса и
+// служит тем же ключом, что логин для обычного входа. Регистр не важен,
+// поэтому ищем по lower(): 'Ivan@mail.ru' и 'ivan@mail.ru' — один человек.
+function userByEmail(email) {
+  return db.prepare('SELECT * FROM users WHERE lower(email) = lower(?)').get(String(email));
+}
+
+function userByProviderId(provider, providerId) {
+  return db
+    .prepare('SELECT * FROM users WHERE provider = ? AND provider_id = ?')
+    .get(String(provider), String(providerId));
+}
+
+// Привязка внешнего входа к уже существующему аккаунту. Пароль не трогаем:
+// он остаётся, и человек может входить обоими способами.
+function linkExternalIdentity(userId, provider, providerId, email) {
+  db.prepare(
+    `UPDATE users
+        SET provider = ?, provider_id = ?,
+            email = COALESCE(email, ?)
+      WHERE id = ?`
+  ).run(String(provider), String(providerId), email ? String(email) : null, Number(userId));
+  return userById(userId);
+}
+
+// Аккаунт без пароля: password_hash остаётся NULL, что и читается как
+// «вход только через внешний сервис». Логин придумываем от почты.
+function createExternalUser({ username, email, provider, providerId, role }) {
+  return db.transaction(() => {
+    const uid = db
+      .prepare(
+        `INSERT INTO users (username, password_hash, email, provider, provider_id, is_active)
+         VALUES (?, NULL, ?, ?, ?, 1)`
+      )
+      .run(String(username), String(email), String(provider), String(providerId)).lastInsertRowid;
+    db.prepare('INSERT INTO user_roles (user_id, role) VALUES (?, ?)').run(Number(uid), role);
+    return userById(uid);
+  })();
+}
+
+// Свободный логин на основе почты. Логин у пользователей уникален, а почта
+// может совпасть с чужим логином — поэтому при совпадении добавляем номер.
+function uniqueUsernameFromEmail(email) {
+  const base = String(email).split('@')[0].replace(/[^a-zA-Z0-9_.]/g, '').slice(0, 24) || 'user';
+  let candidate = base;
+  let n = 1;
+  while (userByUsername(candidate)) {
+    n += 1;
+    candidate = `${base}${n}`;
+  }
+  return candidate;
+}
+
 function touchLastLogin(id) {
   db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(nowDbLocal(), Number(id));
 }
@@ -903,6 +956,11 @@ module.exports = {
   getOr404,
   userByUsername,
   userById,
+  userByEmail,
+  userByProviderId,
+  linkExternalIdentity,
+  createExternalUser,
+  uniqueUsernameFromEmail,
   touchLastLogin,
   publicUser,
   userRoles,

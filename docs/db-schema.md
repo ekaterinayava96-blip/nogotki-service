@@ -502,12 +502,16 @@ CREATE TABLE clients (
 |---|---|---|---|
 | `id` | INTEGER | PK, AUTOINCREMENT | Идентификатор |
 | `username` | TEXT | NOT NULL | Логин для входа |
-| `password_hash` | TEXT | NOT NULL | Хеш пароля scrypt: самодостаточный `scrypt$N$r$p$salt$hash` (встроенный `crypto.scrypt`, параметры стойкости и уникальная соль — в самом хеше). Пароль в открытом виде **никогда** не сохраняется |
+| `password_hash` | TEXT | NULL | Хеш пароля scrypt: самодостаточный `scrypt$N$r$p$salt$hash` (встроенный `crypto.scrypt`, параметры стойкости и уникальная соль — в самом хеше). Пароль в открытом виде **никогда** не сохраняется. **NULL — у аккаунта, созданного через внешний вход (Яндекс): пароля у него нет** |
 | `master_id` | INTEGER | NULL, UNIQUE | FK → masters.id; NULL для владельца, не являющегося мастером |
 | `is_active` | INTEGER | NOT NULL, DEFAULT 1 | 1 — можно входить |
 | `last_login_at` | TEXT | NULL | Последний вход |
+| `email` | TEXT | NULL, UNIQUE (индекс) | Электронная почта. По ней внешний вход узнаёт человека. NULL у аккаунтов, заведённых обычным способом |
+| `provider` | TEXT | NOT NULL, DEFAULT `'local'` | Способ входа: `local` — по паролю, `yandex` — через внешний сервис. CHECK держит список закрытым |
+| `provider_id` | TEXT | NULL | Идентификатор человека во внешнем сервисе. NULL у обычных аккаунтов |
 
-**UNIQUE:** `username`.
+**UNIQUE:** `username`, плюс уникальные индексы `idx_users_email (email)` и
+`idx_users_provider (provider, provider_id)`.
 
 **FK:** `master_id` → masters.id.
 
@@ -515,13 +519,50 @@ CREATE TABLE clients (
 CREATE TABLE users (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   username      TEXT NOT NULL,
-  password_hash TEXT NOT NULL,
+  password_hash TEXT,
   master_id     INTEGER UNIQUE REFERENCES masters(id),
   is_active     INTEGER NOT NULL DEFAULT 1,
   last_login_at TEXT,
+  email         TEXT,
+  provider      TEXT NOT NULL DEFAULT 'local'
+                CHECK (provider IN ('local', 'yandex')),
+  provider_id   TEXT,
   UNIQUE (username)
 );
+CREATE UNIQUE INDEX idx_users_email ON users(email);
+CREATE UNIQUE INDEX idx_users_provider ON users(provider, provider_id);
 ```
+
+**Про NULL в уникальных индексах.** SQLite считает значения NULL различными, поэтому
+сколько угодно аккаунтов без почты и без внешнего id друг другу не мешают:
+уникальность проверяется только на непустых значениях. Отдельный «пустой» аккаунт
+заводить не нужно.
+
+### 3.12.1. Миграция 012 — внешний вход
+
+| | |
+|---|---|
+| **Файл** | `backend/src/db/migrations/012_user_external_auth.sql` |
+| **Что делает** | Пересобирает таблицу `users` |
+
+**Почему пересборка, а не `ALTER TABLE`.** Нужно снять `NOT NULL` с `password_hash`
+(у внешнего аккаунта пароля нет), а SQLite не умеет менять `NOT NULL` на месте.
+Поэтому: создаётся `users_new`, в неё копируются данные, исходная таблица
+удаляется, временная переименовывается в `users`, индексы создаются заново.
+
+**Почему это безопасно.** `runMigrations.js` гасит внешние ключи на весь прогон
+(`PRAGMA foreign_keys = OFF`), поэтому `DROP TABLE users` не ломает ссылки из
+`clients`, `user_roles`, `auth_sessions`, `bookings`, `booking_moves`,
+`slot_holds` и `notifications` — семь таблиц продолжают указывать на `users`.
+Это выверено `PRAGMA foreign_key_check`: нарушений нет.
+
+**Существующие пользователи не пострадали:** 88 строк перенесены, у всех
+сохранены логин, хеш пароля, `master_id` и `is_active`; новые поля получили
+`provider = 'local'`, `email` и `provider_id` — NULL.
+
+**Чего миграция не делает.** Не создаёт аккаунты, не меняет пароли и роли, не
+трогает `user_roles`: роль внешнего входа всегда `client`, и новой роли `user`
+в базе не заводили — клиент здесь называется `client`.
 
 ---
 
@@ -833,12 +874,18 @@ CREATE INDEX idx_booking_moves_booking ON booking_moves(booking_id, created_at);
 CREATE TABLE users (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   username      TEXT NOT NULL,
-  password_hash TEXT NOT NULL,
+  -- NULL у аккаунта без пароля (внешний вход через Яндекс), миграция 012.
+  password_hash TEXT,
   master_id     INTEGER UNIQUE REFERENCES masters(id),
   is_active     INTEGER NOT NULL DEFAULT 1,
   last_login_at TEXT,
+  email         TEXT,
+  provider      TEXT NOT NULL DEFAULT 'local' CHECK (provider IN ('local', 'yandex')),
+  provider_id   TEXT,
   UNIQUE (username)
 );
+CREATE UNIQUE INDEX idx_users_email    ON users(email);
+CREATE UNIQUE INDEX idx_users_provider ON users(provider, provider_id);
 
 -- Роли списком (миграция 007): у человека может быть несколько ролей.
 CREATE TABLE user_roles (

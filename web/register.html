@@ -53,12 +53,23 @@
         </div>
       </form>
 
+      <!--
+        Внешний вход. В прототипе этой кнопки нет: функция не входила в
+        первоначальный план. Аккаунт создаётся при первом входе, форма сверху
+        для тех, кто хочет войти с паролем.
+      -->
+      <p class="auth-divider">или</p>
+      <button type="button" class="btn btn--secondary btn--md btn--block" id="yandexLogin">
+        Войти через Яндекс
+      </button>
+
       <p class="form-alt">Уже есть аккаунт? <a href="login.html">Войти</a></p>
     </div>
   </main>
 
   <script src="js/api.js"></script>
   <script src="js/header.js"></script>
+  <script src="js/yandex-login.js"></script>
   <script>
     (function () {
       var form = document.getElementById('register-form');

@@ -56,6 +56,27 @@ section { padding: var(--space-8) 0; }
 .alert--error   { background: var(--color-error-bg); color: var(--color-error); }
 .alert--success { background: var(--color-success-bg); color: var(--color-success); }
 .alert--warning { background: var(--color-warning-bg); color: var(--color-warning); }
+/* Нейтральное сообщение: ничего не сломалось, надо просто прочитать. Синего в
+   палитре нет и не заводим — берём существующие токены фона и текста. */
+.alert--neutral { background: var(--color-bg-subtle); color: var(--color-text-primary); }
+
+/* Разделитель «или» перед внешним входом. Линия и надпись — из существующих
+   токенов, как и .form-alt под формой. */
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: var(--space-5) 0 var(--space-4);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--color-border);
+}
 
 /* ---------- ШАПКА / НАВИГАЦИЯ ---------- */
 .nav {
