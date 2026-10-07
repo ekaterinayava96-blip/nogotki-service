@@ -14,7 +14,9 @@
     "db:migrate": "node src/db/runMigrations.js",
     "db:seed": "node src/db/seed.js",
     "db:reset": "node src/db/reset.js",
-    "db:backup": "node src/db/backup.js"
+    "db:backup": "node src/db/backup.js",
+    "test:access": "py -3 -X utf8 tests/test_access_matrix.py",
+    "test:roles": "py -3 -X utf8 tests/test_role_scenarios.py"
   },
   "dependencies": {
     "dotenv": "^16.4.0",
