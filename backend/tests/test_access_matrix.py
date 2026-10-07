@@ -79,6 +79,13 @@ MOUNT_PREFIX = {
     "admin.js": "/api/admin",
 }
 
+# Методы, которые не меняют данные. Владельцу отправляем только их: проверка
+# прав не должна ломать то, что проверяет. Отправлять DELETE владельцу нельзя —
+# DELETE /masters/:id и /services/:id у мастера или услуги с записями не удаляет
+# строку, а молча деактивирует её. Именно так из выбора клиентов пропала мастер
+# Екатерина, когда набор дёргал этот маршрут.
+SAFE_METHODS = ("GET", "HEAD")
+
 # Публичные маршруты: сюда гость попасть обязан. Всё остальное — закрытое.
 PUBLIC_PATTERNS = [
     re.compile(r"^/api/auth/(register|login|external/yandex|password/forgot)$"),
@@ -296,13 +303,22 @@ def main():
             check(f"клиент: {method} {path}", st >= 400, f"получил {st}")
         print(f"  проверено маршрутов админки: {len(admin_routes)}")
 
-        print("\n--- Владелец не упирается в ошибки сервера ---")
+        print("\n--- Владелец не упирается в ошибки сервера (только чтение) ---")
+        skipped = 0
         for method, path, _src in routes:
+            if method not in SAFE_METHODS:
+                # Изменяющий запрос владельцу не отправляем: проверка прав не
+                # должна менять данные сама. Иначе набор, который мы запускали
+                # для проверки безопасности, сам деактивировал мастера.
+                skipped += 1
+                continue
             url = concretize(path)
             st = call(method, url, owner)
             if st == 0:
                 continue
             check(f"владелец: {method} {path}", st < 500 or st in PUBLIC_ALLOWED_STATUSES, f"получил {st}")
+        if skipped:
+            note(f"изменяющих маршрутов пропущено для владельца: {skipped} — они не меняют состояние")
 
         print("\n--- Публичные маршруты открыты гостю ---")
         for method, path, _src in routes:
