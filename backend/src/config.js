@@ -82,6 +82,35 @@ if (yandexStubEnabled && !yandexStubEmail) {
   );
 }
 
+// ---------- Резервное копирование базы ----------
+//
+// Раньше копию снимали только вручную (node src/db/backup.js), а расписание
+// оставалось инструкцией в комментарии: сервис запускался годами без единой
+// копии, пока кто-нибудь не догадается настроить cron. Теперь приложение
+// снимает копию само — планировщик ОС больше не обязателен.
+//
+// По умолчанию включено: заданное значение часов означает «включено». Чтобы
+// выключить, нужно явно написать 0.
+const BACKUP_INTERVAL_HOURS_RAW = (process.env.BACKUP_INTERVAL_HOURS || '24').trim();
+const backupIntervalHours = Number(BACKUP_INTERVAL_HOURS_RAW);
+if (!Number.isFinite(backupIntervalHours) || backupIntervalHours < 0) {
+  throw new Error(
+    `[config] BACKUP_INTERVAL_HOURS должен быть числом не меньше 0, получено: «${BACKUP_INTERVAL_HOURS_RAW}»`
+  );
+}
+
+const BACKUP_KEEP_RAW = (process.env.BACKUP_KEEP || '14').trim();
+const backupKeep = Number(BACKUP_KEEP_RAW);
+if (!Number.isInteger(backupKeep) || backupKeep < 1 || backupKeep > 365) {
+  throw new Error(`[config] BACKUP_KEEP должен быть целым 1–365, получено: «${BACKUP_KEEP_RAW}»`);
+}
+
+// Снимать ли копию сразу при старте, не дожидаясь первого интервала.
+// Полезно на сервере, который поднимают часто: копия появляется в первый же
+// час работы, а не через сутки.
+const BACKUP_ON_START = (process.env.BACKUP_ON_START || '0').trim().toLowerCase();
+const backupOnStart = BACKUP_ON_START === '1' || BACKUP_ON_START === 'true' || BACKUP_ON_START === 'yes';
+
 module.exports = {
   port,
   dbPath: path.resolve(__dirname, '..', process.env.DB_PATH || 'data/nogotki.db'),
@@ -95,4 +124,7 @@ module.exports = {
   yandexClientId,
   yandexClientSecret,
   yandexRedirectUri,
+  backupIntervalHours,
+  backupKeep,
+  backupOnStart,
 };

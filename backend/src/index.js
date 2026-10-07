@@ -1,13 +1,14 @@
 'use strict';
 
 // Точка входа API: запускает стартовую последовательность (миграции, обработчики
-// сбоев, graceful shutdown), открывает HTTP-сервер и фоновую чистку истёкших
-// удержаний слотов.
+// сбоев, graceful shutdown), открывает HTTP-сервер, фоновую чистку истёкших
+// удержаний слотов и резервное копирование базы по расписанию.
 
 const config = require('./config');
 const { boot } = require('./startup');
 const app = require('./app');
 const q = require('./repo/queries');
+const { startBackupSchedule } = require('./db/backup');
 
 const CLEANUP_INTERVAL_MS = 60 * 1000; // раз в минуту
 
@@ -38,5 +39,8 @@ const server = app.listen(config.port, () => {
 
 boot({ server });
 startCleanup();
+// Копия снимается приложением, а не планировщиком ОС: иначе о ней забывают
+// и данные остаются без страховки. Интервал — BACKUP_INTERVAL_HOURS.
+startBackupSchedule();
 
 module.exports = { server };
