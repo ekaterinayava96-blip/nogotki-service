@@ -6,10 +6,11 @@
 //   3) глобальные обработчики сбоев процесса;
 //   4) при переданном server — корректная остановка по SIGTERM/SIGINT.
 //
-// Подключение из src/index.js (когда появится HTTP-сервер):
-//   const { boot } = require('./startup');
+// Подключение из src/index.js (HTTP-сервер поднимается после миграций):
+//   const { boot, attachServer } = require('./startup');
+//   boot();
 //   const server = app.listen(config.port);
-//   boot({ server });
+//   attachServer(server);
 //
 // Автономная проверка старта (деплой-смоук): npm run start:check
 
@@ -17,6 +18,7 @@ const config = require('./config');
 const migrations = require('./db/runMigrations');
 
 let booted = false;
+let shutdownInstalled = false;
 
 function boot({ server } = {}) {
   if (booted) return;
@@ -24,9 +26,18 @@ function boot({ server } = {}) {
 
   migrations.run();
   installProcessHandlers();
-  if (server) installGracefulShutdown(server);
+  if (server) attachServer(server);
 
   console.log(`Стартовая подготовка завершена (NODE_ENV=${config.nodeEnv}).`);
+}
+
+// Отдельный шаг, потому что сервер поднимается ПОСЛЕ миграций: держать порт
+// закрытым, пока схема не готова, обязательно. Поэтому boot() зовут без server
+// (миграции и обработчики), а attachServer(server) — сразу после app.listen().
+function attachServer(server) {
+  if (shutdownInstalled || !server) return;
+  shutdownInstalled = true;
+  installGracefulShutdown(server);
 }
 
 function installProcessHandlers() {
@@ -79,4 +90,4 @@ if (require.main === module) {
   console.log('Смоук-проверка пройдена: конфигурация и миграции в порядке.');
 }
 
-module.exports = { boot };
+module.exports = { boot, attachServer };

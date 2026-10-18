@@ -5,7 +5,7 @@
 // удержаний слотов и резервное копирование базы по расписанию.
 
 const config = require('./config');
-const { boot } = require('./startup');
+const { boot, attachServer } = require('./startup');
 const app = require('./app');
 const q = require('./repo/queries');
 const { startBackupSchedule } = require('./db/backup');
@@ -33,11 +33,17 @@ function startCleanup() {
   return timer;
 }
 
+// Порядок именно такой: сначала миграции, потом порт. Раньше было наоборот
+// (app.listen до boot()), и в промежутке между ними сервер уже принимал
+// запросы к схеме, которой могло ещё не быть. В контейнере это заметнее:
+// каждый запуск — чистая сборка, и БД на диске монтируется отдельно.
+boot();
+
 const server = app.listen(config.port, () => {
   console.log(`API запущен на порту ${config.port} (NODE_ENV=${config.nodeEnv}).`);
 });
 
-boot({ server });
+attachServer(server);
 startCleanup();
 // Копия снимается приложением, а не планировщиком ОС: иначе о ней забывают
 // и данные остаются без страховки. Интервал — BACKUP_INTERVAL_HOURS.
