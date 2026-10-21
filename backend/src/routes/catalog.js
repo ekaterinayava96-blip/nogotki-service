@@ -27,10 +27,22 @@ router.get(
 );
 
 // Список активных мастеров с их услугами.
+// Публичный ответ собираем поимённо: listMasters отдаёт ещё и служебные поля
+// (is_active, bookings_count), клиенту про количество записей мастера знать
+// не нужно, а лишние поля в витрине — лишний контракт, который придётся
+// поддерживать.
 router.get(
   '/masters',
   asyncH(async (req, res) => {
-    res.json({ masters: q.listMasters({ activeOnly: true }) });
+    const masters = q.listMasters({ activeOnly: true }).map((m) => ({
+      id: m.id,
+      name: m.name,
+      role: m.role,
+      experience_years: m.experience_years,
+      photo_path: m.photo_path,
+      services: m.services,
+    }));
+    res.json({ masters });
   })
 );
 

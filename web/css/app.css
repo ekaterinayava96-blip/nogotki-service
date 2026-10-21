@@ -60,6 +60,23 @@ section { padding: var(--space-8) 0; }
    палитре нет и не заводим — берём существующие токены фона и текста. */
 .alert--neutral { background: var(--color-bg-subtle); color: var(--color-text-primary); }
 
+/* Плашка «учебный проект». Полоса во всю ширину под шапкой: человек должен
+   понять, куда попал, до того как введёт телефон. Подставляется из
+   js/header.js, поэтому появляется на всех клиентских страницах.
+   Токены те же, что и у предупреждений, новых цветов не заводим. */
+.notice {
+  background: var(--color-warning-bg);
+  color: var(--color-text-primary);
+  border-bottom: 1px solid var(--color-border);
+  padding: var(--space-3) 0;
+}
+.notice__text {
+  margin: 0;
+  text-align: center;
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+}
+
 /* Разделитель «или» перед внешним входом. Линия и надпись — из существующих
    токенов, как и .form-alt под формой. */
 .auth-divider {
@@ -340,6 +357,13 @@ section { padding: var(--space-8) 0; }
 .booking-card__date { font-weight: 800; color: var(--color-text-heading); }
 .booking-card__service { font-weight: 800; color: var(--color-text-heading); }
 .booking-card__meta { color: var(--color-text-muted); font-size: var(--font-size-sm); }
+  /* Причина отмены в карточке «Истории»: тот же приглушённый вид, что и
+     мета-строка, чтобы не спорить с бейджем статуса. */
+  .booking-card__canceled {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+    margin-top: var(--space-2);
+  }
 .booking-card__price { font-weight: 800; color: var(--color-button-primary); }
 .booking-card + .booking-card { margin-top: var(--space-4); }
 

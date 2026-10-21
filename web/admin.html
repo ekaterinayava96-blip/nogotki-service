@@ -15,337 +15,351 @@
   <div id="global-header"></div>
 
   <main class="container">
-    <section style="padding: var(--space-7) 0">
-      <h1>Панель владельца</h1>
-      <p class="hint" id="whoami" style="margin: var(--space-2) 0 var(--space-6); color: var(--color-text-muted)"></p>
+    <section class="adm">
+      <h1 class="adm__title">Панель владельца</h1>
+      <p class="hint adm__lead" id="whoami"></p>
 
       <div id="error" class="alert alert--error" hidden></div>
       <div id="ok" class="alert alert--success" hidden></div>
 
-      <!-- Дашборд: цифры из GET /api/admin/stats, сумма активных записей
-           считается сервером по booking_services, не на клиенте. -->
-      <div id="stats" class="adm-stats" hidden></div>
-
-      <!-- Фильтры — состояние одной страницы, а не отдельные экраны:
-           GET /api/admin/bookings собирается заново на каждое изменение. -->
-      <div class="panel adm-filters" id="filters" hidden>
-        <div class="field">
-          <label for="fStatus">Статус</label>
-          <select id="fStatus">
-            <option value="">Все</option>
-            <option value="wait">Ожидает</option>
-            <option value="confirmed">Подтверждена</option>
-            <option value="done">Выполнена</option>
-            <option value="canceled">Отменена</option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="fMaster">Мастер</label>
-          <select id="fMaster">
-            <option value="">Все мастера</option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="fFrom">Дата с</label>
-          <input type="date" id="fFrom" />
-        </div>
-        <div class="field">
-          <label for="fTo">Дата по</label>
-          <input type="date" id="fTo" />
-        </div>
-        <div class="field adm-filters__actions">
-          <button type="button" class="btn btn--secondary btn--md" id="fReset">Сбросить</button>
-        </div>
+      <!-- Разделы — состояния одной страницы: /api/admin/* уже отдаёт всё нужное,
+           отдельные URL не заводим, чтобы владелец не терялся в закладках. -->
+      <div class="tabs adm__tabs" id="tabs" role="tablist" hidden>
+        <button type="button" class="tabs__tab" role="tab" data-tab="overview" aria-selected="true">Дашборд</button>
+        <button type="button" class="tabs__tab" role="tab" data-tab="bookings" aria-selected="false">Записи</button>
+        <button type="button" class="tabs__tab" role="tab" data-tab="schedule" aria-selected="false">Расписание</button>
+        <button type="button" class="tabs__tab" role="tab" data-tab="services" aria-selected="false">Услуги</button>
+        <button type="button" class="tabs__tab" role="tab" data-tab="masters" aria-selected="false">Мастера</button>
+        <button type="button" class="tabs__tab" role="tab" data-tab="feedback" aria-selected="false">Отзывы<span class="tabs__count" id="feedbackCount" hidden>0</span></button>
+        <button type="button" class="tabs__tab" role="tab" data-tab="rules" aria-selected="false">Правила</button>
       </div>
 
-      <div id="loading" class="adm-loading">
-        <div class="skeleton skel-row"></div>
-        <div class="skeleton skel-row" style="margin-top: var(--space-3)"></div>
-        <div class="skeleton skel-row" style="margin-top: var(--space-3)"></div>
-      </div>
+      <!-- ================= Дашборд ================= -->
+      <section class="tabpane" id="tab-overview" role="tabpanel" hidden>
+        <div id="stats" class="adm-stats" hidden></div>
 
-      <div class="panel adm-table-wrap" id="tableWrap" hidden>
-        <table class="adm-table">
-          <thead>
-            <tr>
-              <th>Дата и время</th>
-              <th>Клиент</th>
-              <th>Услуги</th>
-              <th>Мастер</th>
-              <th>Сумма</th>
-              <th>Статус</th>
-              <th>Действия</th>
-            </tr>
-          </thead>
-          <tbody id="rows"></tbody>
-        </table>
-      </div>
-
-      <div id="empty" class="empty-state" hidden>
-        <p id="emptyText">Записей нет — попробуйте изменить фильтры</p>
-        <a class="btn btn--primary btn--md" href="index.html">На главную</a>
-      </div>
-
-      <!-- Правило бесплатной отмены видит клиент в кабинете и в правилах
-           записи, поэтому меняется здесь, а не в коде. -->
-      <div class="panel" id="settings" hidden style="margin-top: var(--space-6)">
-        <h2 style="margin-bottom: var(--space-2); font-size: var(--font-size-h3)">Правила записи</h2>
-        <p class="hint" style="margin-bottom: var(--space-4)">
-          Бесплатная отмена — за сколько часов до визита клиент может отменить запись без потери предоплаты.
-          0 — отмена в любой момент считается поздней.
-        </p>
-        <form id="settingsForm" class="adm-settings">
+        <div class="panel adm-period" id="periodForm">
           <div class="field">
-            <label for="cancelHours">Бесплатная отмена, часов</label>
-            <input type="number" id="cancelHours" min="0" max="168" step="1" />
-            <p class="hint">От 0 до 168 часов (неделя).</p>
+            <label for="pFrom">Период с</label>
+            <input type="date" id="pFrom" />
           </div>
-          <div class="field adm-settings__save">
-            <button type="submit" class="btn btn--primary btn--md">Сохранить</button>
+          <div class="field">
+            <label for="pTo">по</label>
+            <input type="date" id="pTo" />
           </div>
-        </form>
-      </div>
+          <div class="field adm-period__actions">
+            <button type="button" class="btn btn--secondary btn--md" data-preset="month">Текущий месяц</button>
+            <button type="button" class="btn btn--secondary btn--md" data-preset="7">7 дней</button>
+            <button type="button" class="btn btn--secondary btn--md" data-preset="all">Всё время</button>
+            <button type="button" class="btn btn--primary btn--md" id="periodGo">Показать</button>
+          </div>
+        </div>
+
+        <div id="periodStats" class="adm-stats" hidden></div>
+
+        <div class="adm-split">
+          <div class="panel">
+            <h3>Загрузка по мастерам</h3>
+            <p class="hint">За выбранный период: записи и сумма.</p>
+            <div id="byMaster" class="adm-bars"></div>
+          </div>
+          <div class="panel">
+            <h3>Записи по дням</h3>
+            <p class="hint">Сумма за день, метки — число записей.</p>
+            <div id="byDay" class="adm-bars adm-bars--days"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= Записи ================= -->
+      <section class="tabpane" id="tab-bookings" role="tabpanel" hidden>
+        <div class="panel adm-filters">
+          <div class="field">
+            <label for="fStatus">Статус</label>
+            <select id="fStatus">
+              <option value="">Все</option>
+              <option value="wait">Ожидает</option>
+              <option value="confirmed">Подтверждена</option>
+              <option value="done">Выполнена</option>
+              <option value="canceled">Отменена</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="fMaster">Мастер</label>
+            <select id="fMaster">
+              <option value="">Все мастера</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="fFrom">Дата с</label>
+            <input type="date" id="fFrom" />
+          </div>
+          <div class="field">
+            <label for="fTo">Дата по</label>
+            <input type="date" id="fTo" />
+          </div>
+          <div class="field adm-filters__actions">
+            <button type="button" class="btn btn--secondary btn--md" id="fReset">Сбросить</button>
+          </div>
+        </div>
+
+        <div id="loading" class="adm-loading" hidden>
+          <div class="skeleton skel-row"></div>
+          <div class="skeleton skel-row" style="margin-top: var(--space-3)"></div>
+          <div class="skeleton skel-row" style="margin-top: var(--space-3)"></div>
+        </div>
+
+        <div class="panel adm-table-wrap" id="tableWrap" hidden>
+          <table class="adm-table">
+            <thead>
+              <tr>
+                <th>Дата и время</th>
+                <th>Клиент</th>
+                <th>Услуги</th>
+                <th>Мастер</th>
+                <th>Сумма</th>
+                <th>Статус</th>
+                <th>Действия</th>
+              </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+
+        <div id="empty" class="empty-state" hidden>
+          <p id="emptyText">Записей нет</p>
+          <button type="button" class="btn btn--secondary btn--md" id="emptyReset">Сбросить фильтры</button>
+        </div>
+
+        <!-- Постраничный список: limit/offset в GET /api/admin/bookings,
+             «показано X–Y из Z» считаем из total, а не из длины ответа. -->
+        <div class="adm-pager" id="pager" hidden>
+          <span class="adm-pager__info" id="pagerInfo"></span>
+          <div class="adm-pager__nav">
+            <label class="adm-pager__size" for="fLimit">На странице
+              <select id="fLimit">
+                <option value="10">10</option>
+                <option value="25" selected>25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </select>
+            </label>
+            <button type="button" class="btn btn--secondary btn--sm" id="pagePrev">Назад</button>
+            <button type="button" class="btn btn--secondary btn--sm" id="pageNext">Вперёд</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= Расписание ================= -->
+      <section class="tabpane" id="tab-schedule" role="tabpanel" hidden>
+        <div class="panel adm-schedule">
+          <div class="field adm-schedule__master">
+            <label for="schMaster">Мастер</label>
+            <select id="schMaster"></select>
+          </div>
+          <p class="hint adm-schedule__hint">
+            Рабочие часы по дням недели. День без отметки — выходной: клиент не увидит
+            этих слотов при записи.
+          </p>
+          <div class="adm-week" id="week"></div>
+          <div class="form-actions adm-schedule__save">
+            <button type="button" class="btn btn--primary btn--md" id="scheduleSave">Сохранить расписание</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>Перерывы и выходные</h3>
+          <p class="hint">
+            Разовое закрытие времени: клиент не сможет записаться в эти часы, уже
+            созданные записи сохранятся.
+          </p>
+          <form id="blockForm" class="adm-block-form">
+            <div class="field">
+              <label for="bStart">Начало</label>
+              <input type="datetime-local" id="bStart" required />
+            </div>
+            <div class="field">
+              <label for="bEnd">Конец</label>
+              <input type="datetime-local" id="bEnd" required />
+            </div>
+            <div class="field">
+              <label for="bReason">Причина</label>
+              <select id="bReason">
+                <option value="break">Перерыв</option>
+                <option value="day_off">Выходной</option>
+                <option value="vacation">Отпуск</option>
+                <option value="sick">Болезнь</option>
+                <option value="other">Другое</option>
+              </select>
+            </div>
+            <div class="field adm-block-form__add">
+              <button type="submit" class="btn btn--primary btn--md">Добавить</button>
+            </div>
+          </form>
+
+          <div class="adm-blocks-filter">
+            <div class="field">
+              <label for="blocksFrom">Показать с</label>
+              <input type="date" id="blocksFrom" />
+            </div>
+            <div class="field">
+              <label for="blocksTo">по</label>
+              <input type="date" id="blocksTo" />
+            </div>
+          </div>
+          <div id="blocks" class="adm-blocks"></div>
+        </div>
+      </section>
+
+      <!-- ================= Услуги ================= -->
+      <section class="tabpane" id="tab-services" role="tabpanel" hidden>
+        <div class="panel">
+          <h3 id="serviceFormTitle">Новая услуга</h3>
+          <p class="hint">Прайс виден клиентам сразу после сохранения. Записи, которые уже созданы, сохраняют свою цену.</p>
+          <form id="serviceForm">
+            <input type="hidden" id="serviceId" />
+            <div class="adm-form-grid">
+              <div class="field">
+                <label for="sName">Название</label>
+                <input type="text" id="sName" maxlength="100" required />
+              </div>
+              <div class="field">
+                <label for="sPrice">Цена, ₽</label>
+                <input type="number" id="sPrice" min="0" step="0.01" required />
+                <p class="hint">Например, 1500 или 1500.50</p>
+              </div>
+              <div class="field">
+                <label for="sDuration">Длительность, мин</label>
+                <input type="number" id="sDuration" min="5" max="600" step="5" required />
+              </div>
+            </div>
+            <div class="field">
+              <label for="sDesc">Описание</label>
+              <textarea id="sDesc" rows="3" maxlength="500"></textarea>
+            </div>
+            <label class="adm-check">
+              <input type="checkbox" id="sActive" checked /> Услуга активна (доступна для записи)
+            </label>
+            <div class="form-actions adm-form-actions--row">
+              <button type="submit" class="btn btn--primary btn--md" id="serviceSubmit">Создать</button>
+              <button type="button" class="btn btn--ghost btn--md" id="serviceCancel" hidden>Отмена</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="panel adm-table-wrap">
+          <table class="adm-table">
+            <thead>
+              <tr>
+                <th>Услуга</th>
+                <th>Длительность</th>
+                <th>Цена</th>
+                <th>Состояние</th>
+                <th>Действия</th>
+              </tr>
+            </thead>
+            <tbody id="serviceRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ================= Мастера ================= -->
+      <section class="tabpane" id="tab-masters" role="tabpanel" hidden>
+        <div class="panel">
+          <h3 id="masterFormTitle">Новый мастер</h3>
+          <p class="hint">Отмеченные услуги мастер оказывает. Выключенный мастер скрыт из каталога и записи.</p>
+          <form id="masterForm">
+            <input type="hidden" id="masterId" />
+            <div class="adm-form-grid">
+              <div class="field">
+                <label for="mName">Имя</label>
+                <input type="text" id="mName" maxlength="100" required />
+              </div>
+              <div class="field">
+                <label for="mRole">Специализация</label>
+                <input type="text" id="mRole" maxlength="100" required />
+              </div>
+              <div class="field">
+                <label for="mExp">Опыт, лет</label>
+                <input type="number" id="mExp" min="0" max="60" step="1" />
+              </div>
+            </div>
+            <label class="adm-check">
+              <input type="checkbox" id="mActive" checked /> Мастер активен
+            </label>
+            <div class="field adm-form-grid adm-services-pick">
+              <span class="adm-services-pick__label">Услуги мастера</span>
+              <div class="adm-checks" id="masterServices"></div>
+            </div>
+            <div class="form-actions adm-form-actions--row">
+              <button type="submit" class="btn btn--primary btn--md" id="masterSubmit">Создать</button>
+              <button type="button" class="btn btn--ghost btn--md" id="masterCancel" hidden>Отмена</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="panel adm-table-wrap">
+          <table class="adm-table">
+            <thead>
+              <tr>
+                <th>Мастер</th>
+                <th>Опыт</th>
+                <th>Записи</th>
+                <th>Услуги</th>
+                <th>Состояние</th>
+                <th>Действия</th>
+              </tr>
+            </thead>
+            <tbody id="masterRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ================= Отзывы ================= -->
+      <section class="tabpane" id="tab-feedback" role="tabpanel" hidden>
+        <div class="panel adm-filters adm-filters--slim">
+          <div class="field">
+            <label for="fbStatus">Состояние</label>
+            <select id="fbStatus">
+              <option value="">Все</option>
+              <option value="new">Новые</option>
+              <option value="read">Прочитанные</option>
+              <option value="answered">Отвеченные</option>
+            </select>
+          </div>
+        </div>
+        <div id="feedback" class="adm-feedback"></div>
+        <div id="feedbackEmpty" class="empty-state" hidden>
+          <p>Обращений нет</p>
+        </div>
+      </section>
+
+      <!-- ================= Правила ================= -->
+      <section class="tabpane" id="tab-rules" role="tabpanel" hidden>
+        <div class="panel">
+          <h3>Правила записи</h3>
+          <p class="hint">
+            Бесплатная отмена — за сколько часов до визита клиент может отменить запись
+            без потери предоплаты. 0 — отмена в любой момент считается поздней.
+            Значение видно клиенту в кабинете и в правилах записи.
+          </p>
+          <form id="settingsForm" class="adm-settings">
+            <div class="field">
+              <label for="cancelHours">Бесплатная отмена, часов</label>
+              <input type="number" id="cancelHours" min="0" max="168" step="1" />
+              <p class="hint">От 0 до 168 часов (неделя).</p>
+            </div>
+            <div class="field adm-settings__save">
+              <button type="submit" class="btn btn--primary btn--md">Сохранить</button>
+            </div>
+          </form>
+        </div>
+      </section>
     </section>
   </main>
 
   <script src="js/api.js"></script>
   <script src="js/header.js"></script>
-  <script>
-    (function () {
-      var rows = document.getElementById('rows');
-      var loading = document.getElementById('loading');
-      var tableWrap = document.getElementById('tableWrap');
-      var empty = document.getElementById('empty');
-      var emptyText = document.getElementById('emptyText');
-      var statsBox = document.getElementById('stats');
-      var filters = document.getElementById('filters');
-      var settings = document.getElementById('settings');
-      var cancelHours = document.getElementById('cancelHours');
-
-      var state = { bookings: [], masters: [], loaded: false, busyId: null };
-
-      // Смена статуса доступна только вперёд по lifecycle: подтвердить
-      // ожидание, закрыть визит, отменить. Возврат из «выполнена» в
-      // «подтверждена» — ошибка владельца, а не штатная операция.
-      var NEXT_STATUS = {
-        wait: [{ to: 'confirmed', label: 'Подтвердить', cls: 'btn--primary' },
-               { to: 'canceled', label: 'Отменить', cls: 'btn--ghost' }],
-        confirmed: [{ to: 'done', label: 'Выполнена', cls: 'btn--secondary' },
-                    { to: 'canceled', label: 'Отменить', cls: 'btn--ghost' }],
-        done: [],
-        canceled: []
-      };
-
-      // Дата фильтра «YYYY-MM-DD» -> момент начала суток салона в UTC ISO.
-      // Правая граница в API исключающая (starts_at < to), поэтому день
-      // «по» отправляем как начало СЛЕДУЮЩИХ суток, иначе 1 октября пропала бы.
-      function dayStartIso(day) { return day + 'T00:00:00+03:00'; }
-      function nextDayIso(day) {
-        // Считаем по календарной дате, а не по UTC: салон живёт на +03:00, и
-        // прибавление суток к «2026-10-01T00:00:00+03:00» в UTC съело бы день
-        // назад (локальная полночь — это 21:00 предыдущих суток по UTC).
-        var p = day.split('-');
-        var next = new Date(Date.UTC(Number(p[0]), Number(p[1]) - 1, Number(p[2]) + 1));
-        return next.toISOString().slice(0, 10) + 'T00:00:00+03:00';
-      }
-
-      function query() {
-        var p = [];
-        var status = document.getElementById('fStatus').value;
-        var masterId = document.getElementById('fMaster').value;
-        var from = document.getElementById('fFrom').value;
-        var to = document.getElementById('fTo').value;
-        if (status) p.push('status=' + encodeURIComponent(status));
-        if (masterId) p.push('master_id=' + encodeURIComponent(masterId));
-        if (from) p.push('from=' + encodeURIComponent(dayStartIso(from)));
-        if (to) p.push('to=' + encodeURIComponent(nextDayIso(to)));
-        return p.length ? '?' + p.join('&') : '';
-      }
-
-      function statTile(label, value) {
-        return '<div class="adm-stat"><span class="adm-stat__value">' + window.api.esc(value) +
-          '</span><span class="adm-stat__label">' + window.api.esc(label) + '</span></div>';
-      }
-
-      function renderStats(s) {
-        statsBox.innerHTML =
-          statTile('Всего записей', s.total_bookings) +
-          statTile('Активных', s.active_bookings) +
-          statTile('Сумма активных', window.api.rub(s.active_sum_kopecks)) +
-          statTile('Мастеров', s.masters_count);
-        statsBox.hidden = false;
-      }
-
-      function cell(text, cls) {
-        return '<td' + (cls ? ' class="' + cls + '"' : '') + '>' + text + '</td>';
-      }
-
-      function renderRow(b) {
-        var services = window.api.servicesOf(b);
-        var when = '<strong>' + window.api.fmt(b.starts_at) + '</strong>' +
-          '<span class="adm-sub">' + window.api.hour(b.ends_at) + ' · ' +
-          window.api.duration(services.minutes) + '</span>';
-        var client = '<strong>' + window.api.esc(b.client.name) + '</strong>' +
-          '<span class="adm-sub">' + window.api.esc(b.client.phone || '—') + '</span>';
-        var list = '<span class="adm-sub">' + window.api.esc(services.names) + '</span>';
-        var badge = '<span class="badge badge--' + window.api.esc(b.status) + '">' +
-          window.api.esc(window.BOOKING_STATUS[b.status] || b.status) + '</span>';
-
-        var actions = (NEXT_STATUS[b.status] || []).map(function (a) {
-          return '<button type="button" class="btn btn--sm ' + a.cls + '" data-booking="' + b.id +
-            '" data-status="' + a.to + '"' + (state.busyId === b.id ? ' disabled' : '') + '>' +
-            window.api.esc(a.label) + '</button>';
-        }).join(' ');
-
-        return '<tr>' + cell(when, 'adm-when') + cell(client) + cell(list) +
-          cell(window.api.esc(b.master.name)) + cell(window.api.rub(services.price)) +
-          cell(badge) + cell(actions || '<span class="adm-sub">—</span>', 'adm-actions') + '</tr>';
-      }
-
-      function render() {
-        var has = state.bookings.length > 0;
-        tableWrap.hidden = !has;
-        empty.hidden = has;
-        if (has) {
-          rows.innerHTML = state.bookings.map(renderRow).join('');
-        } else {
-          rows.innerHTML = '';
-          // Пустой список и неудачная загрузка — разные состояния: в первом
-          // случае визиты есть, их просто не подошёл фильтр, во втором
-          // клиент ещё ничего не видел и «смените фильтры» его сбило бы.
-          emptyText.textContent = state.loaded
-            ? 'Под фильтры ничего не нашлось — смените условия или сбросьте их'
-            : 'Записи не загрузились — обновите страницу или попробуйте позже';
-        }
-      }
-
-      function loadBookings() {
-        loading.hidden = false;
-        tableWrap.hidden = true;
-        empty.hidden = true;
-        return window.api.request('/api/admin/bookings' + query()).then(function (r) {
-          state.bookings = r.bookings || [];
-          state.loaded = true;
-          loading.hidden = true;
-          render();
-        }).catch(function (err) {
-          loading.hidden = true;
-          if (err.status === 401) { window.location.replace('login.html?returnTo=admin.html'); return; }
-          if (err.status === 403) { renderForbidden(err.message); return; }
-          render();
-        });
-      }
-
-      function loadMasters() {
-        return window.api.request('/api/admin/masters').then(function (r) {
-          state.masters = r.masters || [];
-          var sel = document.getElementById('fMaster');
-          sel.innerHTML = '<option value="">Все мастера</option>' + state.masters.map(function (m) {
-            return '<option value="' + m.id + '">' + window.api.esc(m.name) + '</option>';
-          }).join('');
-        });
-      }
-
-      function loadStats() {
-        return window.api.request('/api/admin/stats').then(renderStats);
-      }
-
-      function loadSettings() {
-        return window.api.request('/api/admin/studio').then(function (r) {
-          cancelHours.value = Number(r.studio.free_cancel_hours);
-          settings.hidden = false;
-        });
-      }
-
-      // Владелец закрывает запись руками: PATCH меняет статус и возвращает
-      // запись — список и цифры перечитываем, чтобы на экране не осталось
-      // старой строки из памяти.
-      function setStatus(id, status) {
-        state.busyId = id;
-        render();
-        return window.api.request('/api/admin/bookings/' + id, {
-          method: 'PATCH', json: { status: status }
-        }).then(function (r) {
-          var b = r.booking;
-          window.ui.ok('Запись №' + b.id + ': ' + window.BOOKING_STATUS[b.status].toLowerCase() + '.');
-          return Promise.all([loadBookings(), loadStats()]);
-        }).catch(function (err) {
-          if (err.status === 403) { renderForbidden(err.message); return; }
-          return loadBookings();
-        }).then(function () { state.busyId = null; render(); });
-      }
-
-      // Страница и её эндпоинты только для owner. Роль проверяем до запросов,
-      // чтобы клиент или мастер не увидели «Панель владельца» с чужой ошибкой.
-      function renderForbidden(msg) {
-        loading.hidden = true;
-        filters.hidden = true;
-        settings.hidden = true;
-        statsBox.hidden = true;
-        tableWrap.hidden = true;
-        empty.hidden = true;
-        var el = document.getElementById('error');
-        el.className = 'alert';
-        el.textContent = msg || 'Панель владельца доступна только владельцу студии.';
-        el.hidden = false;
-      }
-
-      function bindEvents() {
-        ['fStatus', 'fMaster', 'fFrom', 'fTo'].forEach(function (id) {
-          document.getElementById(id).addEventListener('change', function () {
-            window.ui.clear();
-            loadBookings();
-          });
-        });
-        document.getElementById('fReset').addEventListener('click', function () {
-          document.getElementById('fStatus').value = '';
-          document.getElementById('fMaster').value = '';
-          document.getElementById('fFrom').value = '';
-          document.getElementById('fTo').value = '';
-          window.ui.clear();
-          loadBookings();
-        });
-
-        rows.addEventListener('click', function (ev) {
-          var btn = ev.target.closest('button[data-booking]');
-          if (!btn || btn.disabled) return;
-          setStatus(Number(btn.dataset.booking), btn.dataset.status);
-        });
-
-        document.getElementById('settingsForm').addEventListener('submit', function (ev) {
-          ev.preventDefault();
-          var hours = Number(cancelHours.value);
-          if (!Number.isInteger(hours) || hours < 0 || hours > 168) {
-            window.ui.error('Укажите целое число часов от 0 до 168.');
-            return;
-          }
-          window.api.request('/api/admin/studio', { method: 'PATCH', json: { free_cancel_hours: hours } })
-            .then(function (r) {
-              cancelHours.value = Number(r.studio.free_cancel_hours);
-              window.ui.ok('Правило сохранено: бесплатная отмена за ' + r.studio.free_cancel_hours + ' ч.');
-            });
-        });
-      }
-
-      window.api.me().then(function (user) {
-        if (!user) { window.location.replace('login.html?returnTo=admin.html'); return; }
-        var roles = Array.isArray(user.roles) ? user.roles : [];
-        var who = document.getElementById('whoami');
-        if (roles.indexOf('owner') === -1) {
-          renderForbidden('Панель владельца доступна только владельцу студии.');
-          return;
-        }
-        if (who) who.textContent = 'Записи всей студии: ' + (user.username || '') +
-          '. Смена статуса, фильтры и правило бесплатной отмены.';
-        bindEvents();
-        filters.hidden = false;
-        // Текст ошибки каждого запроса уже показывает window.ui.error, поэтому
-        // в Promise.all ветки глотаем: иначе необработанный reject просто
-        // засоряет консоль, а экран уже показал, что именно не пришло.
-        var quietly = function (p) { return p.catch(function () {}); };
-        Promise.all([loadMasters(), loadStats(), loadSettings(), loadBookings()].map(quietly));
-      });
-    })();
-  </script>
+  <script src="js/admin.js"></script>
 </body>
 </html>

@@ -116,11 +116,22 @@
           '<div class="booking-card__service">' + window.api.esc(services.names) + '</div>' +
           '<div class="booking-card__meta">' +
             window.api.esc(b.master.name) + ' · <span class="booking-card__price">' +
-            window.api.rub(services.price) + '</span> · ' + window.api.duration(services.minutes) +
-          '</div>' +
-          actionsHtml(b, isNext) +
-        '</article>';
-      }
+window.api.rub(services.price) + '</span> · ' + window.api.duration(services.minutes) +
+    '</div>' +
+    // Причина отмены — из записи, а не из уведомления: панель администратора
+    // прямо просит «причину, её видно в истории», и в истории она должна быть.
+    cancelReasonHtml(b) +
+    actionsHtml(b, isNext) +
+    '</article>';
+  }
+
+  // Причина видна только у отменённой записи и только если её заполнили.
+  function cancelReasonHtml(b) {
+    var reason = b && b.cancellation && b.cancellation.reason;
+    if (!reason) return '';
+    return '<div class="booking-card__canceled">Причина отмены: ' +
+      window.api.esc(reason) + '</div>';
+  }
 
       // Действия есть только у активной записи: у прошедшей или отменённой
       // перенос и отмена бессмысленны, поэтому кнопок в карточке нет.

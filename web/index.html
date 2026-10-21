@@ -17,7 +17,6 @@
 
   <main>
     <div class="container">
-      <div id="notice" class="alert alert--warning" hidden></div>
       <div id="error" class="alert alert--error" hidden></div>
     </div>
 
@@ -256,12 +255,29 @@
         if (!st) return;
         var schedule = scheduleText(st.work_hours);
         fmt('st-address', st.address); fmt('st-phone', st.phone);
-        fmt('st-schedule', schedule); fmt('st-telegram', st.telegram);
+        fmt('st-schedule', schedule);
+        tg('st-telegram', st.telegram); tg('ft-telegram', st.telegram);
         fmt('ft-address', st.address); fmt('ft-phone', st.phone);
-        fmt('ft-schedule', schedule); fmt('ft-telegram', st.telegram);
+        fmt('ft-schedule', schedule);
         function fmt(id, val) {
           var el = document.getElementById(id);
           if (el) el.textContent = val == null || val === '' ? '—' : val;
+        }
+        // Telegram — единственный контакт, который должен вести наружу, а не
+        // просто информировать. Адрес берём из studio_info.telegram и
+        // превращаем в ссылку t.me/<handle>: контактом управляет база, а не
+        // разметка, поэтому смена адреса в панели меняет и ссылку.
+        function tg(id, val) {
+          var el = document.getElementById(id);
+          if (!el) return;
+          if (val == null || val === '') { el.textContent = '—'; return; }
+          var a = document.createElement('a');
+          a.href = 'https://t.me/' + encodeURIComponent(String(val).replace(/^@/, ''));
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          a.textContent = val;
+          el.textContent = '';
+          el.appendChild(a);
         }
       }
 
